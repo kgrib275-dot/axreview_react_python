@@ -9,7 +9,7 @@ export default function Lab() {
   const { data, error, loading } = useLoad<string>(() => get<string>("lab/html").then((h) => (typeof h === "string" ? h : String(h ?? ""))), []);
   return (
     <div className="lab-page">
-      <div className="eyebrow">AX Data Lab</div>
+      <div className="eyebrow">데이터 랩</div>
       <h2 className="sec-h">수집 데이터를 <span className="grad">직접 탐색</span>하세요</h2>
       <p className="muted" style={{ margin: "0 0 6px" }}>AX Review가 매일 읽는 기사에서 어떤 주제가 함께 움직이는지 보여 줍니다. 기간·소스 그룹·키워드를 고르면 모든 차트가 함께 좁혀지고, ▶ 버튼으로 날짜별로 자라는 모습을 재생할 수 있습니다.</p>
       <Guide title="여기서 볼 것" items={[

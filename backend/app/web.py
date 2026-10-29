@@ -82,14 +82,14 @@ a{color:#5BC2F5}header,main,footer{max-width:780px;margin:0 auto;padding:0 20px}
 header{display:flex;justify-content:space-between;align-items:center;padding-top:22px;padding-bottom:22px;border-bottom:1px solid #16274A}
 .logo{font-weight:900;font-size:20px;color:#E8EEF8;text-decoration:none}.logo b{color:#2E9BEA}
 .btn{display:inline-block;background:#0A6FD6;color:#fff;text-decoration:none;font-weight:700;padding:9px 18px;border-radius:999px;font-size:15px}
-.meta{font:13px monospace;color:#5BC2F5;letter-spacing:1px;margin:34px 0 6px}
+.meta{font:700 15px/1.5 inherit;color:#8FD0FF;margin:34px 0 6px}
 h1{font-size:30px;line-height:1.4;margin:6px 0 14px}h2{font-size:21px;margin:34px 0 8px;color:#CFE9FF}
-.sum{color:#B5C2D8;border-left:3px solid #2E9BEA;padding:4px 0 4px 16px}
+.sum{color:#C9D4E6;border-left:3px solid #2E9BEA;padding:4px 0 4px 16px}
 li{margin:4px 0}strong{color:#fff}
 .src{margin:30px 0;padding:16px 18px;border:1px solid #16274A;border-radius:12px;background:#0B1730;font-size:15px}
 .list a{display:block;padding:14px 0;border-bottom:1px solid #16274A;text-decoration:none;color:#E8EEF8}
-.list small{display:block;color:#8C9BB5;font-size:13px}
-footer{color:#8C9BB5;font-size:13px;padding-top:30px;padding-bottom:40px}
+.list small{display:block;color:#A0AEC6;font-size:15px}
+footer{color:#A0AEC6;font-size:15px;padding-top:30px;padding-bottom:40px}
 """
 
 

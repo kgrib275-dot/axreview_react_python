@@ -84,7 +84,7 @@ export default function Ask() {
 
   return (
     <div className="ask-page">
-      <div className="eyebrow">Ask AX Review</div>
+      <div className="eyebrow">AX 질문하기</div>
       <h2 className="sec-h">AX <span className="grad">질문하기</span></h2>
       <p className="sec-p">AX Review에 쌓인 노트와 수집 기사를 근거로 답합니다. 답변의 링크로 원문 노트를 확인하세요.</p>
       <Guide title="이렇게 물어보세요" items={[

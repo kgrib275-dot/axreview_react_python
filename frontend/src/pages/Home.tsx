@@ -137,8 +137,9 @@ export default function HomePage() {
       </div>
     </section>
   );
-  if (error) return <>{hero(null)}<div className="alert err">{error}</div></>;
-  if (!data) return <>{hero(null)}<div className="page-loading" style={{ minHeight: 600 }}>불러오는 중…</div></>;
+  // .home — 홈 전용 가독성 규칙(Home.css 맨 아래)의 범위. 다른 페이지 스타일은 건드리지 않는다.
+  if (error) return <div className="home">{hero(null)}<div className="alert err">{error}</div></div>;
+  if (!data) return <div className="home">{hero(null)}<div className="page-loading" style={{ minHeight: 600 }}>불러오는 중…</div></div>;
 
   const issue = data.issue || { week: "", range: "", headline_em: "", headline: "첫 주간 흐름을 준비 중입니다", body_html: "" };
   const counts = data.counts || { notes: 0, articles_week: 0, sources: 0 };
@@ -147,7 +148,7 @@ export default function HomePage() {
   const nSources = counts.sources ?? Object.values(data.sources || {}).reduce((a, v) => a + v.length, 0);
 
   return (
-    <>
+    <div className="home">
       {/* ---------- 히어로 ---------- */}
       {hero({ notes: counts.notes, articles_week: counts.articles_week, sources: nSources })}
 
@@ -156,7 +157,7 @@ export default function HomePage() {
       {/* ---------- For you ---------- */}
       {data.for_you?.length > 0 && (
         <>
-          <div className="eyebrow">For you</div>
+          <div className="eyebrow">나에게 맞는 다음 단계</div>
           <div className="start foryou">
             {data.for_you.slice(0, 4).map((c) => (
               <Go key={c.url + c.title} href={c.url}><span className="n">{c.kicker}</span><b>{c.title}</b><em>보기 →</em></Go>
@@ -166,8 +167,8 @@ export default function HomePage() {
       )}
 
       {/* ---------- 처음 오셨나요 ---------- */}
-      <div className="eyebrow">Start here</div>
-      <h3 className="sec-h" style={{ fontSize: "1.35rem", marginBottom: 12 }}>처음이라면 <span className="grad">이 3가지</span>만 보세요</h3>
+      <div className="eyebrow">처음 오셨다면</div>
+      <h3 className="sec-h sub">처음이라면 <span className="grad">이 3가지</span>만 보세요</h3>
       <div className="start">
         <a href="#this-week"><span className="n">01 · 1분</span><b>이번 주 AX 흐름</b>
           <span>한 주의 AX 소식을 한 줄 헤드라인과 노트로 묶었습니다. 아래로 내리면 바로 보입니다.</span><em>매주 월요일 갱신</em></a>
@@ -184,7 +185,7 @@ export default function HomePage() {
       <div id="this-week" />
       <section className="week">
         <div>
-          <div className="eyebrow">This Week · {issue.week} · {issue.range}</div>
+          <div className="eyebrow">이번 주 · {issue.week} · {issue.range}</div>
           <h2 className="sec-h">이번 주 <span className="grad">AX 흐름</span></h2>
           <h3 className="week-title">{issue.headline_em && <span>{issue.headline_em} </span>}{issue.headline}</h3>
           <p className="week-body" dangerouslySetInnerHTML={{ __html: issue.body_html || "" }} />
@@ -208,8 +209,8 @@ export default function HomePage() {
       {/* ---------- 리더가 알아야 할 3가지 ---------- */}
       {data.leader3?.length > 0 && (
         <div className="l3">
-          <div className="eyebrow">Leader's 3</div>
-          <h3 className="sec-h" style={{ fontSize: "1.35rem", marginBottom: 2 }}>리더가 이번 주 <span className="grad">알아야 할 3가지</span></h3>
+          <div className="eyebrow">리더를 위한 3가지</div>
+          <h3 className="sec-h sub" style={{ marginBottom: 4 }}>리더가 이번 주 <span className="grad">알아야 할 3가지</span></h3>
           <p className="sec-p" style={{ margin: 0 }}>{data.stance}</p>
           <div className="l3-grid">
             {data.leader3.map((t, i) => (
@@ -227,7 +228,7 @@ export default function HomePage() {
       {/* ---------- 노트 ---------- */}
       <div style={{ marginTop: 36 }} />
       <SectionHead
-        eyebrow="Latest Notes" title="쌓이는" grad="노트"
+        eyebrow="최신 노트" title="쌓이는" grad="노트"
         p={<>원문을 깊게 읽고 요약·핵심 포인트·현업 실행·AX 적용까지 정리한 글입니다. 노트 {nNotes}편.</>}
         right={<Link className="more" to="/notes">전체 보기 →</Link>}
       />
@@ -242,7 +243,7 @@ export default function HomePage() {
 
       {/* ---------- 소스 ---------- */}
       <section className="sources">
-        <div className="eyebrow">Sources</div>
+        <div className="eyebrow">출처</div>
         <h2 className="sec-h">어디서 <span className="grad">찾아 읽나</span></h2>
         <p className="sec-p" style={{ marginBottom: 18 }}>
           아래 {nSources}곳을 훑어 후보를 고르고, 원문을 깊게 읽은 것만 노트로 남깁니다. 기사보다 당사자가 직접 쓰거나 말한 원문을 먼저 봅니다.
@@ -253,12 +254,12 @@ export default function HomePage() {
       {/* ---------- 뉴스레터 CTA ---------- */}
       <section className="cta">
         <div>
-          <div className="eyebrow" style={{ color: "#CFE9FF" }}>Newsletter</div>
+          <div className="eyebrow" style={{ color: "#CFE9FF" }}>뉴스레터</div>
           <h2 className="sec-h" style={{ color: "#fff" }}>새 노트가 쌓이면<br />메일로 받아 보세요</h2>
           <p className="sec-p">읽은 자료 중 AX 관점에서 중요한 것만 골라 정리해 보내 드립니다.</p>
         </div>
         <button className="btn cta-btn" onClick={() => openSubscribe("home_cta")}>뉴스레터 구독 →</button>
       </section>
-    </>
+    </div>
   );
 }

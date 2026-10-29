@@ -37,9 +37,7 @@ def summary(kind: str, result: dict) -> str:
     if kind == "collect":
         s = (f"수집 {result.get('collected', 0)} → 신규 {result.get('new', 0)} → 키워드 통과 {result.get('filtered', 0)} "
              f"(채점 {result.get('scored', 0)}, 재채점 {result.get('rescored', 0)})")
-        if result.get("source_errors"):
-            s += f" · 실패 소스 {len(result['source_errors'])}"
-        return s
+        return s  # 실패 소스 수는 message("소스 N곳 실패")에 이미 있다
     if kind == "draft":
         return f"대상 {result.get('targets', 0)} · 초안 {len(result.get('created', []))} · 실패 {len(result.get('failed', []))}"
     if kind == "weekly":
@@ -69,7 +67,9 @@ def run_log_rows(kind: str | None = None, limit: int = 50) -> list[dict]:
         out.append({
             "id": r["id"], "kind": r["kind"], "label": jobs.KIND_LABELS.get(r["kind"], r["kind"]),
             "started_at": r["started_at"], "finished_at": r.get("finished_at"), "trigger": r["trigger"],
-            "ok": bool(r["ok"]), "message": r["message"] or "", "summary": r["message"] or summary(r["kind"], result),
+            # 숫자 요약 + 메시지 둘 다 — 예전엔 메시지("소스 1곳 실패")가 있으면 수집 건수가 숨어 전부 실패한 것처럼 읽혔다 (2026-10-30)
+            "ok": bool(r["ok"]), "message": r["message"] or "",
+            "summary": " · ".join(x for x in (summary(r["kind"], result), r["message"] or "") if x),
             "result": result,
         })
     return out

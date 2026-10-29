@@ -1,26 +1,26 @@
 /* AX 리더 유형 테스트 — Streamlit 판 theme.py 의 .ax-* 조각 */
 .ax-q{font-size:1.15rem;font-weight:700;line-height:1.5;margin:4px 0 12px}
-.progress{display:flex;align-items:center;gap:12px;margin:14px 0 10px;font-size:.84rem;color:var(--ink-2)}
+.progress{display:flex;align-items:center;gap:12px;margin:14px 0 10px;font-size:.92rem;color:var(--ink-2)}
 .progress .bar{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
 .progress .fil{height:100%;background:linear-gradient(90deg,#0A6FD6,#5BC2F5);transition:width .3s}
 .progress span{white-space:nowrap}
-.axt-q .btn.axt-opt{min-height:74px;font-size:.95rem;white-space:normal;line-height:1.45;width:100%}
+.axt-q .btn.axt-opt{min-height:74px;font-size:1.02rem;white-space:normal;line-height:1.45;width:100%}
 .ax-type{text-align:center;padding:28px 22px;border-radius:22px;border:1px solid rgba(46,155,234,.45);margin:6px 0 14px;
   background:radial-gradient(500px circle at 50% 0%,rgba(10,111,214,.35),transparent 70%),var(--surface)}
 .ax-emoji{font-size:3.4rem;line-height:1}.ax-code{font-family:var(--f-mono);letter-spacing:.3em;color:var(--accent-2);margin-top:8px}
 .ax-type h2{font-family:var(--f-display);font-weight:900;font-size:clamp(1.7rem,5vw,2.4rem);margin:6px 0}
 .ax-line{color:var(--ink-2);font-size:1rem;margin:0 auto 10px;max-width:520px}
-.ax-rare{display:inline-block;font-size:.82rem;color:var(--warn-soft);border:1px solid rgba(250,178,25,.45);border-radius:999px;padding:4px 12px;margin-bottom:14px}
+.ax-rare{display:inline-block;font-size:.92rem;color:var(--warn-soft);border:1px solid rgba(250,178,25,.45);border-radius:999px;padding:4px 12px;margin-bottom:14px}
 .ax-axes{display:grid;gap:8px;max-width:520px;margin:6px auto 16px}
-.ax-axis{display:grid;grid-template-columns:6.5em 1fr 6.5em;gap:10px;align-items:center;font-size:.8rem;color:var(--muted)}
+.ax-axis{display:grid;grid-template-columns:6.5em 1fr 6.5em;gap:10px;align-items:center;font-size:.9rem;color:var(--muted)}
 .ax-axis span:first-child{text-align:right}.ax-axis span.on{color:var(--ink);font-weight:700}
 .ax-axis .trk,.ax-dist .trk{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
 .ax-axis .fil,.ax-dist .fil{height:100%;border-radius:4px;background:#2E9BEA}
 .ax-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:left}
-.ax-grid div{background:var(--surface-2);border-radius:12px;padding:12px}.ax-grid span{display:block;font-size:.72rem;color:var(--muted)}
-.ax-grid b{font-size:.86rem;line-height:1.5;font-weight:600}
-@media (max-width:640px){.ax-grid{grid-template-columns:1fr}.ax-axis{grid-template-columns:5em 1fr 5em;font-size:.74rem}}
+.ax-grid div{background:var(--surface-2);border-radius:12px;padding:12px}.ax-grid span{display:block;font-size:.84rem;color:var(--muted)}
+.ax-grid b{font-size:.95rem;line-height:1.5;font-weight:600}
+@media (max-width:640px){.ax-grid{grid-template-columns:1fr}.ax-axis{grid-template-columns:5em 1fr 5em;font-size:.88rem}}
 .ax-dist{display:grid;gap:6px;margin-top:8px}
-.ax-dist>div{display:grid;grid-template-columns:minmax(0,15em) 1fr 3em;gap:10px;align-items:center;font-size:.84rem;color:var(--ink-2)}
-.ax-dist>div.me span{color:var(--ink);font-weight:700}.ax-dist i{font-style:normal;font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
-.ax-dist b{text-align:right;font-family:var(--f-mono)}
+.ax-dist>div{display:grid;grid-template-columns:minmax(0,15em) 1fr 3em;gap:10px;align-items:center;font-size:.92rem;color:var(--ink-2)}
+.ax-dist>div.me span{color:var(--ink);font-weight:700}.ax-dist i{font-style:normal;font-family:var(--f-body);font-size:.84rem;color:var(--muted)}
+.ax-dist b{text-align:right;font-family:var(--f-body)}

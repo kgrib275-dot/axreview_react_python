@@ -32,7 +32,7 @@ export default function UnsubscribePage() {
   const invalid = !token || !!error || (!loading && !data);
   return (
     <>
-      <div className="eyebrow">Newsletter</div>
+      <div className="eyebrow">뉴스레터</div>
       <h2 className="sec-h">구독 해지</h2>
       {done !== null ? (
         <>

@@ -74,7 +74,7 @@ export default function Today() {
 
   return (
     <div className="today-page">
-      <div className="eyebrow">Daily AX{dayLabel && ` · ${dayLabel}`}</div>
+      <div className="eyebrow">오늘의 AX{dayLabel && ` · ${dayLabel}`}</div>
       <h2 className="sec-h">오늘의 <span className="grad">AX 퀴즈 · 예측</span></h2>
       <p className="sec-p" style={{ maxWidth: 720 }}>매일 새 문제 3개와 '내일의 키워드' 예측 투표가 올라옵니다. 모든 문제는 AX Review가 실제로 수집한 데이터에서 나옵니다.</p>
       <div className="today-stats">
@@ -131,7 +131,7 @@ export default function Today() {
 
       {poll && (
         <>
-          <div className="eyebrow" style={{ marginTop: 22 }}>Prediction</div>
+          <div className="eyebrow" style={{ marginTop: 22 }}>내일의 키워드 예측</div>
           <h3 className="sec-h" style={{ fontSize: "1.35rem" }}>🔮 {poll.question}</h3>
           <p className="caption" style={{ margin: "-6px 0 8px" }}>{poll.target_day || "내일"}에 발행된 기사 기준으로 내일 정답을 공개합니다.</p>
           {poll.mine ? (
@@ -154,7 +154,7 @@ export default function Today() {
       )}
 
       <div className="space" id="map" />
-      <div className="eyebrow">Participation Map</div>
+      <div className="eyebrow">참여 지도</div>
       <h3 className="sec-h" style={{ fontSize: "1.35rem" }}>어디서 <span className="grad">참여하고 있을까?</span></h3>
       <p className="caption" style={{ margin: "-6px 0 8px" }}>참여 통계에 보태 주신 분들의 국가·지역·연령대 기준입니다. 나라를 누르면 성별·연령대·유형 분포가 나옵니다.</p>
       <LazyMap />

@@ -4,9 +4,9 @@
 @media (max-width:760px){.diag-cols{grid-template-columns:1fr;gap:20px}.diag-result{position:static}}
 .diag-h{font-size:1.15rem;font-weight:700;margin:18px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--accent)}
 .diag-item{margin:0 0 14px}
-.diag-qt{font-size:.92rem;color:var(--ink);margin-bottom:6px;line-height:1.5}
+.diag-qt{font-size:1rem;color:var(--ink);margin-bottom:6px;line-height:1.5}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;max-width:100%}
-.seg button{all:unset;cursor:pointer;padding:7px 12px;font-size:.84rem;color:var(--ink-2);background:var(--surface);border-right:1px solid var(--line);white-space:nowrap}
+.seg button{all:unset;cursor:pointer;padding:7px 12px;font-size:.92rem;color:var(--ink-2);background:var(--surface);border-right:1px solid var(--line);white-space:nowrap}
 .seg button:last-child{border-right:none}
 .seg button:hover{color:var(--ink)}
 .seg button.on{background:rgba(10,111,214,.3);color:var(--ink);font-weight:700}
@@ -23,5 +23,5 @@
 .diag-nh b{font-size:1.05rem}.diag-nh span{font-weight:700;white-space:nowrap}
 .diag-bar{height:6px;border-radius:3px;background:var(--surface-2);margin:8px 0 10px;overflow:hidden}
 .diag-bar div{height:100%;background:#2E9BEA}
-.diag-next p{color:var(--ink-2);font-size:.88rem;line-height:1.6;margin:0}
-.diag-next p.diag-weak{color:var(--warn-ink);font-size:.78rem;margin:8px 0 0}
+.diag-next p{color:var(--ink-2);font-size:.95rem;line-height:1.6;margin:0}
+.diag-next p.diag-weak{color:var(--warn-ink);font-size:.9rem;margin:8px 0 0}

@@ -79,7 +79,7 @@ export default function Terms() {
 
   return (
     <div className="terms-page">
-      <div className="eyebrow">AI · AX Vocabulary</div>
+      <div className="eyebrow">용어 퀴즈</div>
       <h2 className="sec-h">AI·AX <span className="grad">용어 퀴즈</span></h2>
       <p className="sec-p" style={{ maxWidth: 720 }}>회의에서 나오는 그 용어, 정확히 알고 있나요? 10문제를 풀고 내 레벨을 확인하세요. 틀린 용어는 끝에서 쉬운 비유로 다시 정리해 드립니다.</p>
       {error && <Alert kind="err">{error}</Alert>}
@@ -245,7 +245,7 @@ function ResultView({ track, tracks, qs, picks, onRestart }: { track: string; tr
       </div>
       {review.length > 0 && (
         <>
-          <div className="eyebrow" style={{ marginTop: 18 }}>Review</div>
+          <div className="eyebrow" style={{ marginTop: 18 }}>복습</div>
           <h3 className="sec-h" style={{ fontSize: "1.3rem" }}>틀린 용어 <span className="grad">다시 보기</span></h3>
           <div className="gloss">
             {review.map((e, k) => <div key={k}><b>{e.term}</b><p>{e.define}</p><span>💡 {e.hint}</span></div>)}

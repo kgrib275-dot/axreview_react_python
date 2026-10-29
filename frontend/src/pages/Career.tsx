@@ -50,7 +50,7 @@ export default function Career() {
 
   const header = (
     <>
-      <div className="eyebrow">AX Career Type</div>
+      <div className="eyebrow">AX 커리어 유형</div>
       <h2 className="sec-h">AI 시대, <span className="grad">나에게 맞는 일</span>은?</h2>
       <p className="sec-p" style={{ maxWidth: 720 }}>10문항, 1분이면 끝. 전략가·빌더·데이터 탐험가·현장 운영가·변화 촉진자·거버넌스 수호자 6가지 AX 커리어 유형 중 내 유형과 어울리는 직무, 키울 역량, 학습 경로를 알려 드립니다.</p>
     </>
@@ -93,7 +93,7 @@ export default function Career() {
           <SubscribeCTA source="career" headline={`${res.name}에게 맞는 AX 노트를 매주 받아 보세요`} sub="내 커리어 방향에 맞는 사례를 월요일 아침 3분 요약으로 보내 드립니다." />
           {res.recommended_notes.length > 0 && (
             <>
-              <div className="eyebrow" style={{ marginTop: 20 }}>For {res.name}</div>
+              <div className="eyebrow" style={{ marginTop: 20 }}>{res.name}에게 추천</div>
               <h3 className="sec-h" style={{ fontSize: "1.3rem" }}>이 유형에게 <span className="grad">추천하는 노트</span></h3>
               <div className="grid">{res.recommended_notes.map((n) => <NoteCard key={n.id} n={n} />)}</div>
             </>

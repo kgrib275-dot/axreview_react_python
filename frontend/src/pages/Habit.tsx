@@ -46,7 +46,7 @@ export default function Habit() {
 
   return (
     <div className="mt-page">
-      <div className="eyebrow">AI Habit Check</div>
+      <div className="eyebrow">AI 활용 습관 진단</div>
       <h2 className="sec-h">나는 AI를 <span className="grad">얼마나 잘 쓰고</span> 있을까?</h2>
       <p className="sec-p" style={{ maxWidth: 720 }}>10문항, 1분이면 끝. 사용 빈도·질문력·검증·자동화·공유 5개 영역으로 내 AI 활용 습관을 점검하고, 내 답에 맞춰 다음에 해 볼 3가지를 알려 드립니다.</p>
 
@@ -98,7 +98,7 @@ export default function Habit() {
           <SubscribeCTA source="habit" headline="AI 활용 사례를 매주 3분으로 받아 보세요" sub="다른 회사가 AI를 실제로 어떻게 쓰는지, 월요일 아침 메일로 보내 드립니다." />
           {res.recommended_notes.length > 0 && (
             <>
-              <div className="eyebrow" style={{ marginTop: 20 }}>Next read</div>
+              <div className="eyebrow" style={{ marginTop: 20 }}>이어서 읽기</div>
               <h3 className="sec-h" style={{ fontSize: "1.3rem" }}>이 단계에 <span className="grad">추천하는 노트</span></h3>
               <div className="grid">{res.recommended_notes.map((n) => <NoteCard key={n.id} n={n} />)}</div>
             </>

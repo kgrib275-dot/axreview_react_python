@@ -138,7 +138,7 @@ export default function Diagnosis() {
 
   return (
     <div className="diag-page">
-      <div className="eyebrow">AX Self-Check</div>
+      <div className="eyebrow">자가진단</div>
       <h2 className="sec-h">AX 준비도 <span className="grad">자가진단</span></h2>
       <p className="sec-p" style={{ maxWidth: 760 }}>12문항에 답하면 전략·실행·기반 세 영역의 준비도와 다음 단계를 바로 보여 드립니다. 답은 서버에 저장하지 않고, 결과 링크에만 담깁니다.</p>
 
@@ -166,7 +166,7 @@ export default function Diagnosis() {
         </div>
 
         <div className="diag-result">
-          <div className="eyebrow">Result · {done}/{keys.length} 응답</div>
+          <div className="eyebrow">결과 · {done}/{keys.length} 응답</div>
           <div className="diag-prog"><div style={{ width: `${(done / Math.max(1, keys.length)) * 100}%` }} /></div>
           <div className="diag-total">
             <b>{Math.round(total)}</b>
@@ -181,7 +181,7 @@ export default function Diagnosis() {
       {done > 0 && (
         <>
           <div className="space" />
-          <div className="eyebrow">Next Steps</div>
+          <div className="eyebrow">다음 단계</div>
           <h3 className="sec-h" style={{ fontSize: "1.4rem" }}>영역별 <span className="grad">다음 단계</span></h3>
           <div className="diag-next">
             {cats.map((cat) => {
@@ -207,7 +207,7 @@ export default function Diagnosis() {
           <SubscribeCTA source="diagnosis" headline={`${areas[weakest]?.[0] || ""} 영역을 채울 노트를 매주 받아 보세요`} sub="가장 약한 영역의 실제 사례와 실행 단계를 월요일 아침 메일로 보내 드립니다." />
           {!!res?.recommended?.length && (
             <>
-              <div className="eyebrow" style={{ marginTop: 24 }}>Recommended</div>
+              <div className="eyebrow" style={{ marginTop: 24 }}>추천 노트</div>
               <h3 className="sec-h" style={{ fontSize: "1.3rem" }}>{areas[weakest]?.[0]} 영역 <span className="grad">추천 노트</span></h3>
               <div className="grid">{res.recommended.map((n) => <NoteCard key={n.id} n={n} />)}</div>
             </>

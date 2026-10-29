@@ -180,10 +180,7 @@ export function summary(kind: string, result: Row): string {
   const len = (k: string) => asArray(result[k]).length;
   switch (kind) {
     case "collect": {
-      let s = `수집 ${n("collected")} → 신규 ${n("new")} → 키워드 통과 ${n("filtered")} (채점 ${n("scored")}, 재채점 ${n("rescored")})`;
-      const se = result.source_errors;
-      if (se && (Array.isArray(se) ? se.length : isObj(se) && Object.keys(se).length)) s += ` · 실패 소스 ${Array.isArray(se) ? se.length : Object.keys(se as Row).length}`;
-      return s;
+      return `수집 ${n("collected")} → 신규 ${n("new")} → 키워드 통과 ${n("filtered")} (채점 ${n("scored")}, 재채점 ${n("rescored")})`;  // 실패 소스 수는 message 에
     }
     case "draft": return `대상 ${n("targets")} · 초안 ${len("created")} · 실패 ${len("failed")}`;
     case "weekly": return `${str(result.week)} · 노트 ${str(result.notes)}편 · ${result.published ? "게시" : "초안"}`;
@@ -230,7 +227,8 @@ export function RunLogTable({ kind, limit = 50, rows: given }: { kind?: string; 
       작업: label(str(r.kind)),
       트리거: str(r.trigger),
       결과: r.ok ? "성공" : "주의",
-      요약: str(r.message) || summary(str(r.kind), result),
+      // 숫자 요약 + 메시지 둘 다 — 메시지만 보이면 "소스 1곳 실패"가 전체 실패처럼 읽힌다
+      요약: [summary(str(r.kind), result), str(r.message)].filter(Boolean).join(" · "),
     };
   });
   const first = parseResult(logs[0].result);

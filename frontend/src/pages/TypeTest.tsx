@@ -49,7 +49,7 @@ export default function TypeTest() {
 
   const header = (
     <>
-      <div className="eyebrow">AX Leader Type</div>
+      <div className="eyebrow">AX 리더 유형</div>
       <h2 className="sec-h">나는 어떤 <span className="grad">AX 리더</span>일까?</h2>
       <p className="sec-p" style={{ maxWidth: 720 }}>12문항, 1분이면 끝. MBTI처럼 4가지 축으로 16가지 AX 리더 유형 중 내 유형을 알려 드립니다. 결과를 동료에게 공유하고 찰떡 동료 유형도 확인해 보세요.</p>
     </>
@@ -126,7 +126,7 @@ function ResultView({ data, answers, onRetry }: { data: TypeData; answers: strin
       <SubscribeCTA source="type_test" headline={`${t.name}에게 맞는 AX 노트를 매주 받아 보세요`} sub="내 유형이 놓치기 쉬운 주제까지, 월요일 아침 3분 요약으로 보내 드립니다." />
       {!!res.recommended_notes?.length && (
         <>
-          <div className="eyebrow" style={{ marginTop: 20 }}>For {res.code}</div>
+          <div className="eyebrow" style={{ marginTop: 20 }}>{res.code} 유형에게 추천</div>
           <h3 className="sec-h" style={{ fontSize: "1.3rem" }}>이 유형에게 <span className="grad">추천하는 노트</span></h3>
           <div className="grid">{res.recommended_notes.map((n) => <NoteCard key={n.id} n={n} />)}</div>
         </>

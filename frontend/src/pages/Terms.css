@@ -1,26 +1,26 @@
 /* AI·AX 용어 퀴즈 — Streamlit 판 theme.py 의 .term- · .gloss 조각 */
 .ax-q{font-size:1.15rem;font-weight:700;line-height:1.5;margin:4px 0 12px}
-.progress{display:flex;align-items:center;gap:12px;margin:14px 0 10px;font-size:.84rem;color:var(--ink-2)}
+.progress{display:flex;align-items:center;gap:12px;margin:14px 0 10px;font-size:.92rem;color:var(--ink-2)}
 .progress .bar{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
 .progress .fil{height:100%;background:linear-gradient(90deg,#0A6FD6,#5BC2F5);transition:width .3s}
 .progress span{white-space:nowrap}
 .term-tracks .box{display:flex;flex-direction:column}
 .term-tracks .box .btn{margin-top:auto}
 .term-track{display:flex;flex-direction:column;gap:4px;padding:4px 2px 8px}
-.term-track span{font-size:2.2rem}.term-track b{font-size:1.15rem}.term-track p{color:var(--ink-2);font-size:.86rem;margin:0}
-.term-track em{font-style:normal;color:var(--muted);font-size:.76rem;font-family:var(--f-mono);margin-bottom:8px}
+.term-track span{font-size:2.2rem}.term-track b{font-size:1.15rem}.term-track p{color:var(--ink-2);font-size:.95rem;margin:0}
+.term-track em{font-style:normal;color:var(--muted);font-size:0.9rem;margin-bottom:8px}
 .term-prompt{font-size:1.05rem;line-height:1.65;padding:14px 16px;border-radius:12px;background:var(--surface-2);margin-bottom:12px}
 .term-opts{display:grid;gap:8px}
 .btn.term-opt{min-height:52px;white-space:normal;line-height:1.45;text-align:left;justify-content:flex-start;width:100%}
 .term-fb{padding:14px 16px;border-radius:12px;margin-bottom:10px;display:grid;gap:6px;line-height:1.6}
 .term-fb.ok{background:rgba(12,163,12,.12);border:1px solid rgba(12,163,12,.45)}
 .term-fb.no{background:rgba(230,103,103,.10);border:1px solid rgba(230,103,103,.45)}
-.term-fb>b{font-size:1.05rem}.term-fb span{color:var(--ink-2);font-size:.86rem}
+.term-fb>b{font-size:1.05rem}.term-fb span{color:var(--ink-2);font-size:.95rem}
 .gloss-h{font-size:1.1rem;font-weight:700;margin:16px 0 8px}
 .gloss{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:10px;margin:6px 0 14px}
 .gloss div{padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface)}
-.gloss b{font-size:1rem;color:var(--ink)}.gloss p{margin:6px 0;color:var(--ink-2);font-size:.86rem;line-height:1.6}
-.gloss span{color:var(--accent-2);font-size:.8rem}
+.gloss b{font-size:1rem;color:var(--ink)}.gloss p{margin:6px 0;color:var(--ink-2);font-size:.95rem;line-height:1.6}
+.gloss span{color:var(--accent-2);font-size:.9rem}
 .ax-type{text-align:center;padding:28px 22px;border-radius:22px;border:1px solid rgba(46,155,234,.45);margin:6px 0 14px;
   background:radial-gradient(500px circle at 50% 0%,rgba(10,111,214,.35),transparent 70%),var(--surface)}
 .ax-emoji{font-size:3.4rem;line-height:1}.ax-code{font-family:var(--f-mono);letter-spacing:.3em;color:var(--accent-2);margin-top:8px}

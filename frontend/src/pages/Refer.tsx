@@ -21,7 +21,7 @@ export default function ReferPage() {
 
   const head = (
     <>
-      <div className="eyebrow">Referral</div>
+      <div className="eyebrow">친구 초대</div>
       <h2 className="sec-h">친구를 초대하고 <span className="grad">지난 호 전체</span>를 받으세요</h2>
     </>
   );

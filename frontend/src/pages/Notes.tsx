@@ -110,7 +110,7 @@ function NoteDetail({ id }: { id: string }) {
 
       {data.related && data.related.length > 0 && (
         <>
-          <div className="eyebrow" style={{ marginTop: 28 }}>Related</div>
+          <div className="eyebrow" style={{ marginTop: 28 }}>관련 노트</div>
           <h3 className="sec-h" style={{ fontSize: "1.3rem" }}>이 노트와 <span className="grad">가까운 노트</span></h3>
           <div className="grid">{data.related.map((r) => <NoteCard key={r.id} n={r} />)}</div>
         </>
@@ -191,7 +191,7 @@ function NoteList() {
 
   return (
     <>
-      <div className="eyebrow">Notes</div>
+      <div className="eyebrow">노트</div>
       <h2 className="sec-h">모든 <span className="grad">노트</span></h2>
       <p className="sec-p" style={{ marginBottom: 12 }}>노트 {meta?.total ?? hits.length}편. 카테고리·유형·키워드로 찾아보세요.</p>
       <Guide title="노트 보는 법" items={[

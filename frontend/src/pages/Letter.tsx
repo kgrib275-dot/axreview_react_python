@@ -15,7 +15,7 @@ export default function LetterPage() {
 
   return (
     <>
-      <div className="eyebrow">Newsletter preview</div>
+      <div className="eyebrow">뉴스레터 미리 보기</div>
       <h2 className="sec-h">받게 될 <span className="grad">메일</span> 미리 보기</h2>
       <p className="sec-p" style={{ maxWidth: 760 }}>
         매주 월요일 아침, 아래 모양 그대로 메일함에 도착합니다. 한 주의 흐름 → <b>리더가 알아야 할 3가지</b> → 새 노트 순서입니다.

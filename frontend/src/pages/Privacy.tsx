@@ -193,7 +193,7 @@ export default function PrivacyPage() {
 
   return (
     <>
-      <div className="eyebrow">Privacy Policy</div>
+      <div className="eyebrow">개인정보 처리방침</div>
       <h2 className="sec-h">개인정보 <span className="grad">처리방침</span></h2>
 
       {me?.is_admin && data.missing?.length ? (

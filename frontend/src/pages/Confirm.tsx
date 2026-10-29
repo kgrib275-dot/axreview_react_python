@@ -30,7 +30,7 @@ export default function ConfirmPage() {
 
   return (
     <>
-      <div className="eyebrow">Subscribe</div>
+      <div className="eyebrow">구독 확인</div>
       <h2 className="sec-h">구독 <span className="grad">확인</span></h2>
       {done ? (
         <Alert kind="ok">📬 구독이 완료됐습니다. 다음 호부터 매주 월요일에 보내 드릴게요.</Alert>

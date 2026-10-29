@@ -46,7 +46,7 @@ export default function AboutPage() {
 
   return (
     <>
-      <div className="eyebrow">About</div>
+      <div className="eyebrow">소개</div>
       <h2 className="sec-h">AX Review <span className="grad">소개</span></h2>
       <p className="sec-p" style={{ maxWidth: 760 }}>
         AX Review는 기업 AI 전환(AX)을 추진하며 읽은 아티클·리포트·대담을 노트로 정리하고, 매주 AX 흐름을 한 줄로 묶어 공유하는 공간입니다.
@@ -79,7 +79,7 @@ export default function AboutPage() {
 
       {/* ---------- 숫자로 보기 ---------- */}
       <div className="space" />
-      <div className="eyebrow">By the numbers</div>
+      <div className="eyebrow">숫자로 보기</div>
       <h3 className="sec-h" style={{ fontSize: "1.4rem" }}>숫자로 보는 <span className="grad">AX Review</span></h3>
       <div className="hero-stats" style={{ marginTop: 14 }}>
         <div><CountUp to={nSources} /><span>수집 소스</span></div>
@@ -90,7 +90,7 @@ export default function AboutPage() {
 
       {/* ---------- 만드는 과정 ---------- */}
       <div className="space" />
-      <div className="eyebrow">How it works</div>
+      <div className="eyebrow">이렇게 만듭니다</div>
       <h3 className="sec-h" style={{ fontSize: "1.4rem" }}>원문이 <span className="grad">노트가 되기까지</span></h3>
       <ol className="flowline">
         {STEPS.map(([b, s]) => <li key={b}><b>{b}</b><span>{s}</span></li>)}

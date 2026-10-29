@@ -29,8 +29,8 @@ export default function TryIt() {
 
   return (
     <section ref={ref} className="tryit">
-      <div className="eyebrow">Try it</div>
-      <h3 className="sec-h" style={{ fontSize: "1.35rem", marginBottom: 12 }}><span className="grad">1분 안에</span> 해 보기</h3>
+      <div className="eyebrow">바로 해 보기</div>
+      <h3 className="sec-h sub"><span className="grad">1분 안에</span> 해 보기</h3>
       {!data ? <div className="try-skel" aria-hidden="true" /> : (
         <div className="try-grid">
           {data.quiz && <QuizTile quiz={data.quiz} />}
