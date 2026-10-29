@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import re
 import secrets
-from statistics import mean
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
-from api.common import note_card
+from api.common import cached, note_card
 from api.deps import Caller, CallerDep
 from api.routers import me as me_state
 from app import ax_types as T
@@ -27,14 +26,7 @@ TERM_N = 10
 _SEED_RE = re.compile(r"^[0-9a-f]{8,32}$")
 
 
-def _recorded(kind: str, visitor: str, item: str, extra: dict | None) -> bool:
-    """같은 방문자가 같은 결과를 이미 남겼는지 (새로고침·재요청으로 통계를 부풀리지 않게)."""
-    import json
-    rows = engage.mine(kind, visitor)
-    if not rows:
-        return False
-    last = rows[-1]
-    return last["item"] == item and (last["extra"] or "") == (json.dumps(extra, ensure_ascii=False) if extra is not None else "")
+STATS_TTL = 30  # 결과 분포·점수 분포는 30초 캐시 (결과 화면마다 기록 전체를 세지 않게)
 
 
 def _recs(cat: str, k: int = 3) -> list[dict]:
@@ -44,10 +36,7 @@ def _recs(cat: str, k: int = 3) -> list[dict]:
 # ───────────────────────── AX 리더 유형 테스트 ─────────────────────────
 
 def _distribution() -> dict[str, int]:
-    out: dict[str, int] = {}
-    for r in engage.rows("type_test"):
-        out[r["item"]] = out.get(r["item"], 0) + 1
-    return out
+    return cached("play:type_dist", lambda: engage.item_counts("type_test"), STATS_TTL)
 
 
 def _type_card(code: str, axes: list | None) -> dict:
@@ -66,7 +55,8 @@ def _type_card(code: str, axes: list | None) -> dict:
     top = sorted(dist.items(), key=lambda kv: -kv[1])[:8]
     return {
         "code": code, "emoji": emoji, "name": name, "line": line, "category": cat, "axes": axes_out,
-        "share_pct": round(dist.get(code, 0) / total * 100) if total else None,
+        # 분포는 30초 캐시라 방금 낸 내 결과가 아직 없을 수 있다 — 나 자신은 적어도 1명으로 센다 ('0%가 이 유형'이 나오지 않게)
+        "share_pct": max(1, round(max(1, dist.get(code, 0)) / max(total, 1) * 100)) if total else None,
         "strengths": [T.STRENGTH[ch] for ch in code], "watch": watch,
         "buddy": {"code": partner, "emoji": pe, "name": pn},
         "recommended_notes": _recs(cat),
@@ -107,8 +97,7 @@ def type_result(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
             raise HTTPException(status_code=400, detail="보기에 없는 답입니다.")
     code, axes = T.score(answers)
     extra = {"axes": [[l, r, lc, rc] for l, r, lc, rc in axes]}
-    if not _recorded("type_test", c.visitor, code, extra):
-        engage.record("type_test", code, extra=extra, visitor=c.visitor)
+    engage.record_result("type_test", code, extra=extra, visitor=c.visitor)  # 직전과 같은 결과면 남기지 않는다
     me_state.save_state(c.visitor, {"axt_answers": answers, "axt_step": len(answers), "axt_recorded": code + "".join(answers)})
     return _type_card(code, axes)
 
@@ -131,12 +120,16 @@ def _seed(v) -> str:
     return v
 
 
+def _term_hist(track: str) -> dict[int, int]:
+    return cached(f"play:term_hist:{track}", lambda: engage.value_hist("term_quiz", track), STATS_TTL)
+
+
 def _track_stats() -> dict[str, dict]:
-    rows = engage.rows("term_quiz")
     out = {}
     for key in G.TRACKS:
-        scores = [int(r["value"]) for r in rows if r["item"] == key and r["value"].isdigit()]
-        out[key] = {"n": len(scores), "avg": round(mean(scores)) if scores else None, "terms": len(G.TERMS[key])}
+        h = _term_hist(key)
+        n = sum(h.values())
+        out[key] = {"n": n, "avg": round(sum(v * c for v, c in h.items()) / n) if n else None, "terms": len(G.TERMS[key])}
     return out
 
 
@@ -183,17 +176,17 @@ def terms_result(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     pct = round(right / len(qs) * 100)
     wrong = [q for p, q in zip(picks, qs) if p != q["answer"]]
     extra = {"wrong": [q["term"] for q in wrong]}
-    if not _recorded("term_quiz", c.visitor, track, extra) or payload.get("force") is True:
-        engage.record("term_quiz", track, str(pct), extra, visitor=c.visitor)
-    scores = [int(r["value"]) for r in engage.rows("term_quiz") if r["item"] == track and r["value"].isdigit()]
-    better = sum(s < pct for s in scores) / len(scores) * 100 if scores else 0
+    engage.record_result("term_quiz", track, str(pct), extra, visitor=c.visitor, force=payload.get("force") is True)
+    h = _term_hist(track)
+    n = sum(h.values())
+    better = sum(cnt for v, cnt in h.items() if v < pct) / n * 100 if n else 0
     emoji, lv = G.level(pct)
     me_state.save_state(c.visitor, {"term_track": track, "term_i": len(qs), "term_picks": picks, "term_recorded": f"{track}:{seed}"})
     return {
         "score": pct, "right": right, "n": len(qs), "level": [emoji, lv], "track_label": G.TRACKS[track][1],
         "wrong": [q["term"] for q in wrong],
         "review": [{"term": q["term"], "define": q["define"], "hint": q["hint"]} for q in wrong],
-        "stats": {"n": len(scores), "avg": round(mean(scores)) if scores else None, "top_pct": max(1, round(100 - better))},
+        "stats": {"n": n, "avg": round(sum(v * cnt for v, cnt in h.items()) / n) if n else None, "top_pct": max(1, round(100 - better))},
         "share": {"url": f"/s/terms?track={track}&score={pct}", "title": f"AI·AX 용어 퀴즈 {pct}점 ({lv}) — 너는 몇 점?",
                   "text": f"AI·AX 용어 퀴즈 {pct}점({lv}). 업무에서 바로 쓰는 용어들인데, 몇 점 나오시나요?"},
     }
@@ -276,8 +269,8 @@ def diagnosis_result(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     if weakest:
         me_state.save_state(c.visitor, {"diag_weak": weakest})  # 홈 '나를 위한 추천'에 쓴다 (개인화)
     extra = {cat: round(v) for cat, v in scores.items()}
-    if done == len(KEYS) and not _recorded("diagnosis", c.visitor, weakest, extra):
-        engage.record("diagnosis", weakest, f"{total:.0f}", extra, visitor=c.visitor)
+    if done == len(KEYS):
+        engage.record_result("diagnosis", weakest, f"{total:.0f}", extra, visitor=c.visitor)
     report = "\n".join(
         [f"AX 준비도 자가진단 결과 — 종합 {total:.0f}점 ({name} 단계)", ""]
         + [f"[{AREAS[cat][0]}] {scores[cat]:.0f}점 ({level(scores[cat])[0]}) — 다음 단계: {NEXT[cat][min(3, int(scores[cat] // 25))]}" for cat in AREAS]

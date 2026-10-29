@@ -198,6 +198,62 @@ def record(kind: str, item: str = "", value: str = "", extra=None, visitor: str 
 SAMPLE = "s:"  # 예시(가상) 데이터의 방문자 접두어 — 분석·통계·적재에서는 기본으로 뺀다
 
 
+def record_result(kind: str, item: str, value: str = "", extra=None, visitor: str = "", force: bool = False) -> bool:
+    """테스트 결과 기록 — 같은 사람이 바로 전에 남긴 결과와 같으면(새로고침·결과 화면 재요청) 남기지 않는다.
+
+    예전엔 '직전 결과 확인'과 '저장'이 따로라, 결과 요청이 동시에 두 번 오면 둘 다 저장돼 분포가 부풀었다.
+    지금은 SQLite 쓰기 잠금(BEGIN IMMEDIATE) 안에서 확인과 저장을 같이 한다 — 서버 프로세스가 여럿이어도 한 번만.
+    force=True 면 같은 결과라도 남긴다 (용어 퀴즈 '한 번 더'). 남겼으면 True."""
+    item, value = str(item)[:200], str(value)[:200]
+    extra_s = json.dumps(extra, ensure_ascii=False) if extra is not None else ""
+    conn = _conn()
+    conn.isolation_level = None
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        last = conn.execute("SELECT item, extra FROM engagements WHERE visitor=? AND kind=? ORDER BY id DESC LIMIT 1",
+                            (visitor, kind)).fetchone()
+        n = conn.execute("SELECT COUNT(*) FROM engagements WHERE visitor=? AND created_at >= ?",
+                         (visitor, today().isoformat())).fetchone()[0]
+        if (not force and last and last["item"] == item and (last["extra"] or "") == extra_s) or n >= MAX_PER_VISITOR_DAY:
+            conn.execute("COMMIT")
+            return False
+        conn.execute("INSERT INTO engagements (kind, item, value, extra, visitor, created_at) VALUES (?,?,?,?,?,?)",
+                     (kind, item, value, extra_s, visitor, datetime.now(db.KST).isoformat(timespec="seconds")))
+        conn.execute("COMMIT")
+        return True
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
+def item_counts(kind: str) -> dict[str, int]:
+    """결과별 참여 수 (예시 데이터 제외) — 기록을 한 줄씩 읽지 않고 DB에서 센다."""
+    conn = _conn()
+    try:
+        return {r[0]: r[1] for r in conn.execute(
+            "SELECT item, COUNT(*) FROM engagements WHERE kind=? AND visitor NOT LIKE ? GROUP BY item", (kind, SAMPLE + "%"))}
+    finally:
+        conn.close()
+
+
+def value_hist(kind: str, item: str | None = None) -> dict[int, int]:
+    """점수(value, 정수)별 참여 수 (예시 데이터 제외) — '참여자 중 상위 N%'·평균을 기록 전체를 읽지 않고 계산한다."""
+    sql = ("SELECT CAST(value AS INTEGER), COUNT(*) FROM engagements WHERE kind=? AND visitor NOT LIKE ? "
+           "AND value != '' AND value NOT GLOB '*[^0-9]*'")
+    args: list = [kind, SAMPLE + "%"]
+    if item is not None:
+        sql += " AND item=?"
+        args.append(item)
+    conn = _conn()
+    try:
+        return {int(r[0]): r[1] for r in conn.execute(sql + " GROUP BY 1", args)}
+    finally:
+        conn.close()
+
+
 def rows(kind: str | None = None, since_days: int | None = None, include_sample: bool = False) -> list[dict]:
     where, params = [], []
     if not include_sample:

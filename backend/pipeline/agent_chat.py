@@ -9,9 +9,10 @@ import json
 import os
 import re
 import threading
+import typing
 from datetime import datetime
 
-from . import db, gemini_keys, vectorizer
+from . import db, gemini_keys, industry, vectorizer
 from .llm import CATEGORIES
 
 DEFAULT_MODEL = "gemini-2.5-flash"
@@ -74,13 +75,31 @@ def build_context(notes: list[dict], articles: list[dict], site_url: str) -> str
 
 # ───────────── 모델이 호출하는 함수 (docstring이 그대로 함수 설명이 된다) ─────────────
 
+def _n(v, default: int, lo: int, hi: int) -> int:
+    """Gemini 는 도구 인자 숫자를 10.0 처럼 소수로 넘긴다 — 목록 자르기에 그대로 쓰면 TypeError 가 나고 모델이
+    '시스템 오류'라고 답했다 (2026-10-29). 정수로 바꾸고 범위 안으로."""
+    try:
+        n = int(float(v)) if v not in (None, "") else default
+    except (TypeError, ValueError):
+        n = default
+    return max(lo, min(hi, n or default))
+
+
+_SUFFIX = re.compile(r"(권|업계|업종|업|분야|산업|계열)$")
+
+
+def _terms(query_text: str) -> list[str]:
+    """'금융권 사례' → ['금융', '사례'] — 업종 뒤에 붙는 말(권·업계·분야…)은 떼고 단어별로 찾는다."""
+    return [_SUFFIX.sub("", w) or w for w in (query_text or "").lower().split()]
+
+
 def search_notes(query_text: str = "", category: str = "", date_from: str = "", date_to: str = "",
                  limit: int = 10) -> dict:
     """AX Review에 게시된 노트를 조건으로 찾는다. 특정 카테고리·기간·단어로 노트 목록을
     요청하거나 "몇 편 있어" 같은 질문에 호출한다.
 
     Args:
-        query_text: 제목·요약·태그에 포함된 단어 (예: "제조", "컨택센터").
+        query_text: 제목·요약·태그·업종에 포함된 단어, 여러 개면 띄어 쓴다 (예: "제조", "금융", "컨택센터").
         category: "AX Strategy", "AX Implementation", "AX Enablement" 중 하나.
         date_from: 게시일 시작 (YYYY-MM-DD).
         date_to: 게시일 끝 (YYYY-MM-DD, 포함).
@@ -90,10 +109,11 @@ def search_notes(query_text: str = "", category: str = "", date_from: str = "", 
         total(조건에 맞는 전체 건수)과 notes(title/category/published/summary/url 목록).
     """
     rows = db.notes("published")
-    q = (query_text or "").lower()
+    terms = _terms(query_text)
+    # 업종(금융·제조…)은 노트 목록 화면의 #업종 과 같은 기준(industry.of)으로 함께 찾는다
     hits = [
         n for n in rows
-        if (not q or q in f"{n['title']} {n['summary']} {n['tags']}".lower())
+        if all(t in f"{n['title']} {n['summary']} {n['tags']} {' '.join(industry.of(n))}".lower() for t in terms)
         and (not category or n["category"] == category)
         and (not date_from or n["published"] >= date_from)
         and (not date_to or n["published"] <= date_to)
@@ -103,7 +123,7 @@ def search_notes(query_text: str = "", category: str = "", date_from: str = "", 
         "total": len(hits),
         "notes": [{"title": n["title"], "category": n["category"], "published": n["published"],
                    "summary": n["summary"][:300], "url": f"{site}/notes?id={n['id']}"}
-                  for n in hits[:min(limit or 10, 30)]],
+                  for n in hits[:_n(limit, 10, 1, 30)]],
     }
 
 
@@ -122,19 +142,19 @@ def search_articles(query_text: str = "", source: str = "", min_score: int = 0, 
     Returns:
         total과 articles(title/source/score/summary/published_at/url 목록, 점수순).
     """
-    q = (query_text or "").lower()
+    terms = _terms(query_text)
     hits = [
-        a for a in db.articles(min(days or 7, 90))
-        if (not q or q in f"{a['title']} {a['summary_ko']}".lower())
+        a for a in db.articles(_n(days, 7, 1, 90))
+        if all(t in f"{a['title']} {a['summary_ko']}".lower() for t in terms)
         and (not source or source.lower() in a["source"].lower())
-        and (a["llm_score"] or 0) >= (min_score or 0)
+        and (a["llm_score"] or 0) >= _n(min_score, 0, 0, 5)
     ]
     hits.sort(key=lambda a: -(a["llm_score"] or 0))
     return {
         "total": len(hits),
         "articles": [{"title": a["title"], "source": a["source"], "score": a["llm_score"],
                       "summary": (a["summary_ko"] or "")[:300], "published_at": (a["published_at"] or "")[:10],
-                      "url": a["url"]} for a in hits[:min(limit or 10, 30)]],
+                      "url": a["url"]} for a in hits[:_n(limit, 10, 1, 30)]],
     }
 
 
@@ -148,12 +168,17 @@ def weekly_flows(limit: int = 5) -> dict:
     Returns:
         flows(week/range/headline/body 목록, 최신순).
     """
-    items = db.issues("published")[-(limit or 5):][::-1]
+    items = db.issues("published")[-_n(limit, 5, 1, 20):][::-1]
     return {"flows": [{"week": i["week"], "range": i["range"],
                        "headline": f"{i['headline_em']} {i['headline']}".strip(), "body": i["body"]} for i in items]}
 
 
 TOOLS = [search_notes, search_articles, weekly_flows]
+# 이 파일은 `from __future__ import annotations` 라 인자 타입이 문자열("str")로 남는다. google-genai 자동 함수 호출은
+# 인자를 isinstance(값, 타입)으로 확인하다 문자열 타입에서 TypeError 를 내고, 함수를 부르지도 못한 채 모델에 오류를 돌려줬다
+# → 모델이 "검색 중 시스템 오류"라고 답했다 (2026-10-29). 실제 타입으로 바꿔 둔다.
+for _f in TOOLS:
+    _f.__annotations__ = typing.get_type_hints(_f)
 
 
 def _history(history: list[dict]):
