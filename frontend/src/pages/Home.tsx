@@ -249,7 +249,7 @@ export default function HomePage() {
               </Link>
             ))}
           </div>
-          <Link to="/letter" className="more" style={{ display: "inline-block", marginTop: 12 }}>✉ 이 내용이 매주 메일로 옵니다 · 메일 미리 보기 →</Link>
+          <Link to="/letter" className="more wrap" style={{ display: "inline-block", marginTop: 12 }}>✉ 이 내용이 매주 메일로 옵니다 · 메일 미리 보기 →</Link>
         </div>
       )}
 
