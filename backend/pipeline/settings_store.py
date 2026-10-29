@@ -5,8 +5,10 @@ AI_NEWS는 설정마다 JSON 파일을 따로 뒀지만, 여기서는 한 파일
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
+import time
 import uuid
 from copy import deepcopy
 
@@ -40,14 +42,43 @@ DEFAULTS = {
     "engage": {"sample_on_map": True},  # 공개 참여 지도에 예시(가상) 데이터를 함께 보여 줄지 (배지로 표시)  # Databricks 설정이 있으면 수집·초안·주간 흐름·발송 뒤 자동 적재
 }
 
-_lock = threading.Lock()
+_lock = threading.RLock()
+_cache: dict = {}  # 파일 경로 → (mtime_ns, size, 저장된 dict) — 요청마다(관리자 판정) 파일을 읽고 파싱하지 않게
+
+
+def _saved(strict: bool = False) -> dict:
+    """settings.json 내용. 바뀌지 않았으면 메모리 사본을 쓴다.
+
+    쓰는 도중의 파일(다른 프로세스)을 읽어 깨진 JSON 이 나오면 마지막으로 제대로 읽은 값을 쓴다 — 예전엔 기본값으로
+    떨어져 스케줄이 꺼진 것처럼 보이거나, 저장할 때 관리자 IP·웹훅이 지워질 수 있었다. strict 면 그 대신 예외."""
+    key = str(SETTINGS_FILE)
+    try:
+        st = SETTINGS_FILE.stat()
+    except FileNotFoundError:
+        return {}
+    hit = _cache.get(key)
+    if hit and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+        return hit[2]
+    for attempt in range(3):
+        try:
+            saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            if not isinstance(saved, dict):
+                raise ValueError("settings.json 이 객체가 아닙니다")
+            _cache[key] = (st.st_mtime_ns, st.st_size, saved)
+            return saved
+        except (json.JSONDecodeError, ValueError, OSError):
+            time.sleep(0.05 * (attempt + 1))
+            try:
+                st = SETTINGS_FILE.stat()
+            except FileNotFoundError:
+                return {}
+    if strict:
+        raise RuntimeError("settings.json 을 읽지 못했습니다 — 저장을 멈춥니다 (다른 설정을 덮어쓰지 않게)")
+    return hit[2] if hit else {}
 
 
 def load() -> dict:
-    try:
-        saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        saved = {}
+    saved = deepcopy(_saved())  # 부르는 쪽이 목록을 고쳐도 메모리 사본이 바뀌지 않게
     cfg = deepcopy(DEFAULTS)
     for key, val in saved.items():
         if isinstance(val, dict) and isinstance(cfg.get(key), dict):
@@ -57,12 +88,32 @@ def load() -> dict:
     return cfg
 
 
+def _write(cfg: dict) -> None:
+    """임시 파일에 쓴 뒤 바꿔 끼운다 — 읽는 쪽이 반쯤 쓰인 파일을 보지 않게."""
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = SETTINGS_FILE.with_name(f"{SETTINGS_FILE.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    for attempt in range(10):
+        try:
+            os.replace(tmp, SETTINGS_FILE)
+            return
+        except PermissionError:  # Windows: 다른 프로세스가 마침 읽는 중
+            time.sleep(0.05 * (attempt + 1))
+    os.replace(tmp, SETTINGS_FILE)
+
+
 def save_section(key: str, value) -> None:
     with _lock:
+        _saved(strict=True)  # 못 읽으면 저장하지 않는다
         cfg = load()
         cfg[key] = value
-        SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        SETTINGS_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write(cfg)
+
+
+def update_section(key: str, fn) -> None:
+    """읽고-바꾸고-저장을 한 잠금 안에서 — 두 요청이 동시에 목록에 추가해도 한쪽이 사라지지 않게."""
+    with _lock:
+        save_section(key, fn(deepcopy(load()[key])))
 
 
 def enabled_sources(all_names: list[str]) -> list[str]:
@@ -91,13 +142,11 @@ LOCAL_IPS = {None, "", "127.0.0.1", "::1", "localhost"}
 
 
 def add_admin_ip(label: str, ip: str) -> None:
-    admins = load()["admin_ips"]
-    admins.append({"id": uuid.uuid4().hex, "label": label, "ip": ip})
-    save_section("admin_ips", admins)
+    update_section("admin_ips", lambda admins: admins + [{"id": uuid.uuid4().hex, "label": label, "ip": ip}])
 
 
 def delete_admin_ip(admin_id: str) -> None:
-    save_section("admin_ips", [a for a in load()["admin_ips"] if a["id"] != admin_id])
+    update_section("admin_ips", lambda admins: [a for a in admins if a["id"] != admin_id])
 
 
 def is_admin_ip(ip: str | None) -> bool:
@@ -161,18 +210,17 @@ def webhook_url_ok(url: str) -> bool:
 def add_webhook(name: str, url: str) -> None:
     if not webhook_url_ok(url):
         raise ValueError("Teams 웹훅 주소(https://…webhook.office.com 등)만 등록할 수 있습니다.")
-    hooks = load()["webhooks"]
-    hooks.append({"id": uuid.uuid4().hex, "name": name, "url": url, "enabled": True})
-    save_section("webhooks", hooks)
+    update_section("webhooks", lambda hooks: hooks + [{"id": uuid.uuid4().hex, "name": name, "url": url, "enabled": True}])
 
 
 def update_webhook(webhook_id: str, **fields) -> None:
-    hooks = load()["webhooks"]
-    for w in hooks:
-        if w["id"] == webhook_id:
-            w.update(fields)
-    save_section("webhooks", hooks)
+    def change(hooks):
+        for w in hooks:
+            if w["id"] == webhook_id:
+                w.update(fields)
+        return hooks
+    update_section("webhooks", change)
 
 
 def delete_webhook(webhook_id: str) -> None:
-    save_section("webhooks", [w for w in load()["webhooks"] if w["id"] != webhook_id])
+    update_section("webhooks", lambda hooks: [w for w in hooks if w["id"] != webhook_id])

@@ -23,9 +23,13 @@ type Result = {
 
 const DEFAULT_LEVELS: Level[] = [[25, "탐색", "#8C9BB5"], [50, "실험", "#5BC2F5"], [75, "확산", "#2E9BEA"], [101, "내재화", "#0ca30c"]];
 
+// 서버가 주는 단계 색(다크 기준 hex)을 테마 토큰으로 — 다크에서는 같은 색, 라이트에서는 대비를 맞춘 색
+const TONE: Record<string, string> = { "#8c9bb5": "var(--muted)", "#5bc2f5": "var(--accent-2)", "#2e9bea": "var(--accent)", "#0ca30c": "var(--ok)" };
+const tone = (c: string) => TONE[c.toLowerCase()] || c;
+
 function levelOf(levels: Level[], score: number): [string, string] {
   const hit = levels.find(([limit]) => score < limit) || levels[levels.length - 1];
-  return hit ? [hit[1], hit[2]] : ["", "#8C9BB5"];
+  return hit ? [hit[1], tone(hit[2])] : ["", "var(--muted)"];
 }
 
 export default function Diagnosis() {
@@ -227,8 +231,8 @@ function Radar({ scores, areas }: { scores: Record<string, number>; areas: Areas
   return (
     <svg className="diag-radar" viewBox={`0 0 ${size} ${size + 20}`} role="img" aria-label={`영역별 점수 레이더: ${alt}`}
       fontFamily="IBM Plex Sans KR, Malgun Gothic, sans-serif">
-      {[0.25, 0.5, 0.75, 1].map((g) => <polygon key={g} points={pts(g)} fill="none" stroke="#16274A" strokeWidth={1} />)}
-      {ang.map((a, i) => { const [x, y] = pt(a, 1); return <line key={i} x1={cx} y1={cy} x2={x.toFixed(1)} y2={y.toFixed(1)} stroke="#16274A" />; })}
+      {[0.25, 0.5, 0.75, 1].map((g) => <polygon key={g} points={pts(g)} fill="none" style={{ stroke: "var(--line)" }} strokeWidth={1} />)}
+      {ang.map((a, i) => { const [x, y] = pt(a, 1); return <line key={i} x1={cx} y1={cy} x2={x.toFixed(1)} y2={y.toFixed(1)} style={{ stroke: "var(--line)" }} />; })}
       <polygon points={poly} fill="rgba(46,155,234,.22)" stroke="#2E9BEA" strokeWidth={2} />
       {ang.map((a, i) => {
         const c = cats[i];
@@ -237,10 +241,10 @@ function Radar({ scores, areas }: { scores: Record<string, number>; areas: Areas
         const anchor = Math.abs(Math.cos(a)) < 0.3 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
         return (
           <g key={c}>
-            <circle cx={x.toFixed(1)} cy={y.toFixed(1)} r={5} fill="#2E9BEA" stroke="#0B1730" strokeWidth={2} />
-            <text x={lx.toFixed(1)} y={ly.toFixed(1)} textAnchor={anchor} fill="#B5C2D8" fontSize={12}>
+            <circle cx={x.toFixed(1)} cy={y.toFixed(1)} r={5} style={{ fill: "var(--accent)", stroke: "var(--surface)" }} strokeWidth={2} />
+            <text x={lx.toFixed(1)} y={ly.toFixed(1)} textAnchor={anchor} style={{ fill: "var(--ink-2)" }} fontSize={12}>
               {areas[c]?.[0] || c}
-              <tspan x={lx.toFixed(1)} dy={16} fill="#E8EEF8" fontWeight={700} fontSize={15}>{Math.round(scores[c])}</tspan>
+              <tspan x={lx.toFixed(1)} dy={16} style={{ fill: "var(--ink)" }} fontWeight={700} fontSize={15}>{Math.round(scores[c])}</tspan>
             </text>
           </g>
         );

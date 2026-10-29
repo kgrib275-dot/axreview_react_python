@@ -190,7 +190,7 @@ _MD_LINK_DEF_RE = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*\S+.*$", re.M)  # 참조 �
 
 # 질문하기 한도: 한도 확인과 사용 기록을 한 번에(프로세스 전역 잠금) — 탭 여러 개로 동시에 물어 한도를 넘지 못하게.
 QUOTA_LOCK = threading.Lock()
-INFLIGHT: set[str] = set()  # 지금 답을 만드는 중인 IP (IP당 동시 1건)
+INFLIGHT: set[str] = set()  # 지금 답을 만드는 중인 방문자 (방문자당 동시 1건 — IP당 상한은 api/routers/ask.py)
 
 
 def clean_answer(text: str) -> str:

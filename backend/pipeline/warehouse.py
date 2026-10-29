@@ -128,9 +128,29 @@ def _pseudonymize(table: str, row: dict) -> dict:
     return row
 
 
+# 행이 추가만 되고 바뀌지 않는 표(정수 id) — 전체를 읽어 해시하지 않고 마지막으로 보낸 id 뒤만 읽는다.
+# 참여 기록은 사용자 수에 비례해 수백만 행까지 커지므로, 예전처럼 매번 전부 읽으면 그동안 API 가 수십 초 멈췄다(500만 행 11초+).
+APPEND_ONLY = {"engagements"}
+
+
+def _diff_append_only(conn, table: str, cols: list[tuple[str, str]]) -> tuple[list[tuple[str, str]], list[dict], list[str]]:
+    pk = TABLES[table]
+    names = ", ".join(c for c, _ in cols)
+    last = conn.execute("SELECT MAX(CAST(pk AS INTEGER)) FROM warehouse_sync WHERE tbl=?", (table,)).fetchone()[0] or 0
+    rows = [_pseudonymize(table, dict(r)) for r in conn.execute(
+        f"SELECT {names} FROM {table} WHERE {pk} > ? AND visitor NOT LIKE ? ORDER BY {pk}", (last, engage.SAMPLE + "%"))]
+    # 보관 기간이 지나 지워진 행 — 비교는 SQLite 안에서 (파이썬으로 전체 키를 읽지 않게)
+    deleted = [r[0] for r in conn.execute(
+        f"SELECT pk FROM warehouse_sync s WHERE tbl=? AND NOT EXISTS (SELECT 1 FROM {table} t WHERE t.{pk} = CAST(s.pk AS INTEGER))",
+        (table,))]
+    return cols, rows, deleted
+
+
 def _diff(conn, table: str) -> tuple[list[tuple[str, str]], list[dict], list[str]]:
     """(열 목록, 보낼 행, 지울 기본 키)."""
     cols = _columns(conn, table)
+    if table in APPEND_ONLY:
+        return _diff_append_only(conn, table, cols)
     pk = TABLES[table]
     names = ", ".join(c for c, _ in cols)
     where = f" WHERE visitor NOT LIKE '{engage.SAMPLE}%'" if table in ("engagements", "profiles") else ""  # 예시 데이터 제외

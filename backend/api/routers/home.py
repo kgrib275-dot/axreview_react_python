@@ -4,12 +4,11 @@ Streamlit 판 app_pages/home.py 를 옮겼다. 본문 강조(editorial.highlight
 """
 from __future__ import annotations
 
-import time
 from datetime import date
 
 from fastapi import APIRouter
 
-from api.common import note_card
+from api.common import cached, note_card
 from api.deps import Caller, CallerDep
 from api.routers import me as me_state
 from api.routers.site import counts, source_groups
@@ -19,17 +18,10 @@ from pipeline.llm import CATEGORIES
 
 router = APIRouter(tags=["home"])
 
-_cache: dict = {}
 
 def _trends() -> dict:
     """급상승 키워드 — 10분 캐시 (기사 전체를 매번 세지 않게)."""
-    now = time.time()
-    hit = _cache.get("trends")
-    if hit and now - hit[0] < 600:
-        return hit[1]
-    t = knowledge.trends()
-    _cache["trends"] = (now, t)
-    return t
+    return cached("home:trends", knowledge.trends, 600)
 
 def ticker() -> dict | None:
     t = _trends()
@@ -72,12 +64,7 @@ _SHARED_TTL = 30  # 모든 방문자에게 같은 부분은 30초 캐시 — 가
 
 @router.get("/home")
 def home(c: Caller = CallerDep) -> dict:
-    now = time.time()
-    hit = _cache.get("home")
-    if not hit or now - hit[0] > _SHARED_TTL:
-        hit = (now, _shared())
-        _cache["home"] = hit
-    shared = hit[1]
+    shared = cached("home:shared", _shared, _SHARED_TTL)
     out = {k: v for k, v in shared.items() if k != "_notes"}
     out["for_you"] = for_you(c.visitor, shared["_notes"])  # 방문자마다 다른 부분만 매번 계산
     return out

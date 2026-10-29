@@ -3,9 +3,11 @@
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  data: Record<string, unknown> | null; // detail 이 객체({message, …})일 때 그 객체 — 예: 구독 이메일 오타 제안
+  constructor(status: number, message: string, data: Record<string, unknown> | null = null) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -18,7 +20,8 @@ function adminToken(): string | null {
 }
 
 export async function api<T = unknown>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
-  const headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) };
+  // X-Requested-With: 서버가 상태를 바꾸는 요청(POST·PUT·DELETE)에 요구한다 — 다른 사이트에서 보낸 위조 요청 차단 (backend/api/main.py)
+  const headers: Record<string, string> = { "X-Requested-With": "axreview", ...(init.headers as Record<string, string> | undefined) };
   let body = init.body;
   if (init.json !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -36,10 +39,12 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
     /* 그대로 둔다 */
   }
   if (!res.ok) {
-    const detail = (data && typeof data === "object" && "detail" in (data as Record<string, unknown>))
-      ? String((data as Record<string, unknown>).detail)
-      : `요청 실패 (${res.status})`;
-    throw new ApiError(res.status, detail);
+    const raw = data && typeof data === "object" ? (data as Record<string, unknown>).detail : undefined;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const obj = raw as Record<string, unknown>;
+      throw new ApiError(res.status, String(obj.message ?? `요청 실패 (${res.status})`), obj);
+    }
+    throw new ApiError(res.status, raw !== undefined && typeof raw !== "object" ? String(raw) : `요청 실패 (${res.status})`);
   }
   return data as T;
 }

@@ -1,10 +1,11 @@
-// 전 페이지 공통 틀 — 헤더(내비·구독·KO/EN), 푸터, 플로팅 버튼, 구독 띠, 대화상자, 추천 링크(?ref=)·공유 유입(?s=1) 기록.
+// 전 페이지 공통 틀 — 헤더(내비·구독·테마·KO/EN), 푸터, 플로팅 버튼, 구독 띠, 대화상자, 추천 링크(?ref=)·공유 유입(?s=1) 기록.
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { track } from "../api";
 import { DialogProvider, useDialogs } from "../components/Dialogs";
 import { useMe } from "../me";
 import Nudge from "./Nudge";
+import { ThemeToggle } from "./Theme";
 import { LangToggle } from "./Translate";
 
 const NAV = [
@@ -48,7 +49,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <header className="hdr">
         <div className="container hdr-in">
           {/* (N) = React·FastAPI 새 버전 표시 — Streamlit 판과 구분 */}
-          <Link to="/" className="logo" aria-label="AX Review (새 버전)"><img src="/logo.svg" alt="" height={26} /><span className="ver">(N)</span></Link>
+          <Link to="/" className="logo" aria-label="AX Review (새 버전)"><img className="logo-dk" src="/logo.svg" alt="" height={26} /><img className="logo-lt" src="/logo-light.svg" alt="" height={26} /><span className="ver">(N)</span></Link>
           <button className="btn sm burger" aria-label="메뉴" onClick={() => setOpen((o) => !o)}>☰ 메뉴</button>
           <nav className={`nav ${open ? "open" : ""}`}>
             {NAV.map(([to, label]) => (
@@ -61,6 +62,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             {me?.is_admin && <NavLink to="/admin" className={() => (isAdminArea ? "on" : "")}>관리</NavLink>}
           </nav>
           <div className="hdr-right">
+            <ThemeToggle />
             <LangToggle />
             <button className="btn primary sm sub" onClick={() => openSubscribe("header")}>구독</button>
           </div>
@@ -86,7 +88,7 @@ function Footer() {
         <span>기업 AX를 위해 읽은 자료를 정리한 노트입니다.</span>
         <span>
           <Link to="/letter">뉴스레터 미리보기</Link>
-          {me?.privacy_active !== false && <> · <Link to="/privacy" style={{ color: "#fff", fontWeight: 800 }}>개인정보 처리방침</Link></>}
+          {me?.privacy_active !== false && <> · <Link to="/privacy" style={{ color: "var(--ink-hi)", fontWeight: 800 }}>개인정보 처리방침</Link></>}
         </span>
       </div>
     </footer>

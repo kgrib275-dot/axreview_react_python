@@ -86,13 +86,29 @@ def _reserve(c: Caller, cfg: dict, member: dict | None, detail: str) -> None:
     if not _enabled(cfg):
         raise HTTPException(status_code=503, detail="지금은 질문하기를 사용할 수 없습니다.")
     with agent_chat.QUOTA_LOCK:
-        if c.ip in agent_chat.INFLIGHT and not c.is_admin:
+        # 동시에 답을 만드는 질문: 방문자당 1개, IP당 IP_INFLIGHT_MAX 개 — 회사처럼 여러 명이 한 공인 IP를 써도 한 명 때문에 막히지 않게
+        if not c.is_admin and (c.visitor in agent_chat.INFLIGHT or _ip_busy.get(c.ip, 0) >= IP_INFLIGHT_MAX):
             raise HTTPException(status_code=409, detail="앞선 질문의 답을 만드는 중입니다. 잠시 후 다시 물어 주세요.")
         if usage(c, cfg, member)["limit_hit"]:
             raise HTTPException(status_code=429, detail="질문 한도에 도달했습니다.")
         db.record_access(c.ip, "AX 질문하기", "ask", detail)  # 질문 원문은 남기지 않는다
         engage.record("ask", membership.ask_item(member["id"]) if member else "", visitor=c.visitor)
-        agent_chat.INFLIGHT.add(c.ip)
+        agent_chat.INFLIGHT.add(c.visitor)
+        _ip_busy[c.ip] = _ip_busy.get(c.ip, 0) + 1
+
+
+IP_INFLIGHT_MAX = 4
+_ip_busy: dict = {}
+
+
+def _done(c: Caller) -> None:
+    with agent_chat.QUOTA_LOCK:
+        agent_chat.INFLIGHT.discard(c.visitor)
+        n = _ip_busy.get(c.ip, 0) - 1
+        if n > 0:
+            _ip_busy[c.ip] = n
+        else:
+            _ip_busy.pop(c.ip, None)
 
 
 @router.post("/ask")
@@ -108,7 +124,7 @@ def ask(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
         context = agent_chat.build_context(notes, articles, site) if (notes or articles) else ""
         answer = agent_chat.clean_answer(agent_chat.ask(history, question, context))
     finally:
-        agent_chat.INFLIGHT.discard(c.ip)
+        _done(c)
     sources = (
         [{"title": n["title"], "url": f"{site}/notes?id={n['id']}", "kind": "노트", "sim": round(float(n["similarity"]), 3)} for n in notes]
         + [{"title": a["title"], "url": a["url"], "kind": a["source"], "sim": round(float(a["similarity"]), 3)} for a in articles]
@@ -133,7 +149,7 @@ def ask_web(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     try:
         answer = agent_chat.clean_answer(agent_chat.ask_with_web_search(history, question))
     finally:
-        agent_chat.INFLIGHT.discard(c.ip)
+        _done(c)
     if agent_chat.is_failure(answer):
         return {"answer": answer, "fallback": True}
     return {"answer": answer + "\n\n*웹 검색 기반 답변입니다.*", "fallback": False}

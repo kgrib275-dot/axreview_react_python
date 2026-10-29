@@ -7,6 +7,7 @@ Streamlit 세션 스레드와 스케줄러 스레드가 동시에 쓰기 때문�
 from __future__ import annotations
 
 import json
+import time
 import os
 import re
 import secrets
@@ -87,6 +88,10 @@ CREATE TABLE IF NOT EXISTS access_logs (
   id INTEGER PRIMARY KEY, ip TEXT, page TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'view',
   detail TEXT, created_at TEXT NOT NULL
 );
+-- 접속 기록은 요청마다 쌓이고 90일 보관된다 — 남용 제한·조회 수·정리가 표 전체를 훑지 않게 (200만 행 실측 1.7초 → ms)
+CREATE INDEX IF NOT EXISTS ix_acc_action ON access_logs(action, created_at);
+CREATE INDEX IF NOT EXISTS ix_acc_ip ON access_logs(ip, action, created_at);
+CREATE INDEX IF NOT EXISTS ix_acc_created ON access_logs(created_at);
 """
 
 # 이전 버전 DB(샘플 사이트만 있던 시절)에 없던 컬럼 — 있으면 건너뛴다.
@@ -195,8 +200,16 @@ _NOTE_FIELDS = {"title", "source", "url", "category", "kind", "audiences", "tags
                 "published", "status", "article_hash"}
 
 
+def safe_url(url) -> str:
+    """http(s) 주소만 — 피드가 javascript:·data: 주소를 넣어도 화면의 링크(href)로 실행되지 않게."""
+    u = str(url or "").strip()
+    return u if re.match(r"^https?://", u, re.I) else ""
+
+
 def add_note(**fields) -> int:
     fields = {k: v for k, v in fields.items() if k in _NOTE_FIELDS}
+    if "url" in fields:
+        fields["url"] = safe_url(fields["url"])
     fields.setdefault("published", date.today().isoformat())
     fields["created_at"] = _now()
     conn = connect()
@@ -213,6 +226,8 @@ def add_note(**fields) -> int:
 
 def update_note(note_id: int, **fields) -> None:
     fields = {k: v for k, v in fields.items() if k in _NOTE_FIELDS}
+    if "url" in fields:
+        fields["url"] = safe_url(fields["url"])
     if fields:
         # 내용이 바뀌면 임베딩을 지워 다음 벡터화 때 다시 만든다.
         reset = ", embedding = NULL" if fields.keys() & {"title", "summary", "body", "tags"} else ""
@@ -283,10 +298,13 @@ def subscribe(email: str, industries: str = "", referred_by: str = "", confirmed
     now = _now()
     token = secrets.token_hex(16)
     conn = connect()
+    conn.isolation_level = None  # 아래 BEGIN IMMEDIATE 를 직접 — 같은 주소 동시 신청이 둘 다 INSERT 하다 500 나지 않게
     try:
-        with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
             row = conn.execute("SELECT active, confirmed_at FROM subscribers WHERE email = ?", (email,)).fetchone()
             if row and row["active"] and row["confirmed_at"]:
+                conn.execute("COMMIT")
                 return None
             if row:  # 확인 전 재신청·해지 후 재구독 — 다시 확인받는다
                 conn.execute("UPDATE subscribers SET active = 1, industries = ?, confirm_token = ?, unsubscribed_at = NULL, "
@@ -303,7 +321,11 @@ def subscribe(email: str, industries: str = "", referred_by: str = "", confirmed
                     (email, now, secrets.token_hex(16), industries, referred_by, None if confirmed else token,
                      now if confirmed else None, secrets.token_hex(16) if confirmed else None),
                 )
-            return None if confirmed else token
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        return None if confirmed else token
     finally:
         conn.close()
 
@@ -434,6 +456,8 @@ def upsert_articles(items: list[Item]) -> None:
     try:
         with conn:
             for it in items:
+                if not safe_url(it.url):
+                    continue  # http(s) 가 아닌 주소의 기사는 받지 않는다
                 conn.execute(
                     "INSERT OR IGNORE INTO articles (url_hash, url, title, source, source_type, published_at,"
                     " collected_at, excerpt, summary_ko, llm_score, matched_kw, kw_score)"
@@ -638,10 +662,18 @@ def last_run_ok(kind: str) -> str | None:
     return rows[0]["started_at"] if rows else None
 
 
-def note_view_counts() -> dict[int, int]:
-    """노트별 상세 조회 수 (access_logs의 note_view 기록)."""
+_view_cache: dict = {}
+
+
+def note_view_counts(ttl: int = 60) -> dict[int, int]:
+    """노트별 상세 조회 수 (access_logs의 note_view 기록). 노트 목록마다 부르므로 60초 캐시."""
+    hit = _view_cache.get(str(DB_PATH))
+    if hit and time.monotonic() - hit[0] < ttl:
+        return hit[1]
     rows = _rows("SELECT detail, COUNT(*) n FROM access_logs WHERE action = 'note_view' GROUP BY detail")
-    return {int(r["detail"]): r["n"] for r in rows if (r["detail"] or "").isdigit()}
+    out = {int(r["detail"]): r["n"] for r in rows if (r["detail"] or "").isdigit()}
+    _view_cache[str(DB_PATH)] = (time.monotonic(), out)
+    return out
 
 
 def access_count_since(ip: str | None, action: str, minutes: int) -> int:
@@ -652,6 +684,12 @@ def access_count_since(ip: str | None, action: str, minutes: int) -> int:
                             (ip, action, since)).fetchone()[0]
     finally:
         conn.close()
+
+
+def access_count_detail_since(action: str, detail: str, minutes: int) -> int:
+    since = (datetime.now() - timedelta(minutes=minutes)).isoformat(timespec="seconds")
+    return _rows("SELECT COUNT(*) n FROM access_logs WHERE action = ? AND created_at >= ? AND detail = ?",
+                 (action, since, detail))[0]["n"]
 
 
 def access_count_today_all(action: str) -> int:
@@ -690,9 +728,19 @@ def purge_expired() -> dict[str, int]:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         for name, (sql, params) in stmts.items():
             table = sql.split()[2]
-            if table in tables:
+            if table not in tables:
+                continue
+            # 5천 행씩 나눠 지운다 — 한 번에 지우면 쓰기 잠금을 오래 잡아 그동안 화면의 기록 저장이 'database is locked'로 실패한다
+            where = sql.split(" WHERE ", 1)[1]
+            out[name] = 0
+            while True:
                 with conn:
-                    out[name] = conn.execute(sql, params).rowcount
+                    n = conn.execute(f"DELETE FROM {table} WHERE rowid IN (SELECT rowid FROM {table} WHERE {where} LIMIT 5000)",
+                                     params).rowcount
+                out[name] += n
+                if n < 5000:
+                    break
+                time.sleep(0.05)  # 사이사이 다른 쓰기에 잠금을 넘긴다
     finally:
         conn.close()
     return out
@@ -704,6 +752,17 @@ def already_sent(send_key: str) -> set[str]:
 
 def mark_sent(send_key: str, email_hash: str) -> None:
     _exec("INSERT OR IGNORE INTO newsletter_sends (send_key, email_hash, sent_at) VALUES (?,?,?)", (send_key, email_hash, _now()))
+
+
+def claim_send(send_key: str, email_hash: str) -> bool:
+    """보내기 전에 기록을 먼저 잡는다. 이미 있으면(다른 실행이 보냄·보내는 중) False — 중복 발송 방지."""
+    return _exec("INSERT OR IGNORE INTO newsletter_sends (send_key, email_hash, sent_at) VALUES (?,?,?)",
+                 (send_key, email_hash, _now())) == 1
+
+
+def release_send(send_key: str, email_hash: str) -> None:
+    """발송 실패 — 잡아 둔 기록을 풀어 다음 실행에서 다시 보낸다."""
+    _exec("DELETE FROM newsletter_sends WHERE send_key = ? AND email_hash = ?", (send_key, email_hash))
 
 
 def note_for_article(url_hash: str) -> bool:
@@ -719,6 +778,38 @@ def ran_ok_since(kind: str, since: datetime) -> bool:
 def set_meta(key: str, value: str) -> None:
     _exec("CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     _exec("INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+
+_OWNER = f"{os.getpid()}"
+
+
+def acquire_lease(name: str, seconds: int) -> bool:
+    """여러 프로세스 사이 잠금 (app_meta 의 lease:<name> = '<만료 시각>|<pid>'). 비었거나 만료됐으면 잡고 True."""
+    now = datetime.now()
+    until = (now + timedelta(seconds=seconds)).isoformat(timespec="seconds")
+    conn = connect()
+    conn.isolation_level = None
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT value FROM app_meta WHERE key = ?", ("lease:" + name,)).fetchone()
+        if row and row["value"].split("|")[0] > now.isoformat(timespec="seconds"):
+            conn.execute("COMMIT")
+            return False
+        conn.execute("INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                     ("lease:" + name, f"{until}|{_OWNER}"))
+        conn.execute("COMMIT")
+        return True
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
+def release_lease(name: str) -> None:
+    _exec("DELETE FROM app_meta WHERE key = ? AND value LIKE ?", ("lease:" + name, f"%|{_OWNER}"))
 
 
 def get_meta(key: str) -> str | None:

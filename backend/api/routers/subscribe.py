@@ -7,13 +7,14 @@ Streamlit 판 app/dialogs.py(subscribe·contact), app_pages/confirm.py·unsubscr
 """
 from __future__ import annotations
 
+import hashlib
 import re
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from api.deps import Caller, CallerDep, throttle
 from api.routers import me as me_state
-from pipeline import db, engage, industry, mailer, referral, report_pdf
+from pipeline import db, email_check, engage, industry, mailer, referral, report_pdf
 
 router = APIRouter(tags=["subscribe"])
 
@@ -29,9 +30,25 @@ def _email(v) -> str:
     return email
 
 
+CONFIRM_MAIL_GAP_MIN = 10   # 같은 주소로 확인 메일은 10분에 한 번
+CONFIRM_MAIL_PER_DAY = 3    # 하루 3번까지 — 남의 주소로 신청을 반복해 메일 폭탄을 보내지 못하게
+
+
+def _may_mail(email: str) -> bool:
+    key = hashlib.sha256(email.lower().encode()).hexdigest()[:24]  # 주소 자체는 접속 기록에 남기지 않는다
+    if (db.access_count_detail_since("confirm_mail", key, CONFIRM_MAIL_GAP_MIN)
+            or db.access_count_detail_since("confirm_mail", key, 24 * 60) >= CONFIRM_MAIL_PER_DAY):
+        return False
+    db.record_access(None, "구독 확인 메일", "confirm_mail", key)
+    return True
+
+
 @router.post("/subscribe")
 def subscribe(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     email = _email(payload.get("email"))
+    bad = email_check.problem(email, typo_ok=payload.get("typo_ok") is True)  # 오타·없는 도메인 — 신청 전에 알려 준다
+    if bad:
+        raise HTTPException(status_code=400, detail=bad)  # {message, suggest} — 화면이 '고친 주소로 신청' 버튼을 보여 준다
     if payload.get("agree") is not True:
         raise HTTPException(status_code=400, detail="만 14세 이상만 구독할 수 있습니다.")
     inds = payload.get("industries") or []
@@ -39,18 +56,22 @@ def subscribe(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     source = str(payload.get("source") or "header")[:40]
     if source not in SOURCES:
         source = "other"
-    throttle("subscribe_try", c, per_visitor=3, per_ip=10)
+    throttle("subscribe_try", c, per_visitor=3, per_ip=30)  # 회사 공용 IP 고려 — 주소별 메일 한도(_may_mail)는 따로
     ref = payload.get("ref")
     ref = ref if isinstance(ref, str) and referral.valid_code(ref) else ""
     token = db.subscribe(email, ",".join(inds), ref)
     if token:
         engage.record("subscribe", source, value=ref, visitor=c.visitor)
-        mailer.send_confirmation(email, token)  # SMTP가 없으면 관리 화면에서 나중에 보낸다
+        if mailer.is_configured() and _may_mail(email):
+            mailer.send_confirmation(email, token)  # 실패하면 관리 > 구독·발송에서 다시 보낼 수 있다
     # 이미 구독 중이어도 같은 응답 — 존재 여부 비노출
     me_state.save_state(c.visitor, {"subscribed": True, "pref_inds": inds})  # 노트 업종 필터 기본값 (개인화)
-    return {"ok": True, "message": "확인 메일을 보냈습니다. 메일의 '구독 확인하기'를 눌러야 구독이 완료됩니다. "
-                                   f"구독 후 메일 하단의 내 추천 링크로 친구 {referral.REWARD_AT}명이 구독하면 지난 호 주간 PDF 전체를 열어 드립니다.",
-            "reward_at": referral.REWARD_AT}
+    reward = f"구독 후 메일 하단의 내 추천 링크로 친구 {referral.REWARD_AT}명이 구독하면 지난 호 주간 PDF 전체를 열어 드립니다."
+    if mailer.is_configured():
+        msg = f"{email} 으로 확인 메일을 보냈습니다. 메일의 '구독 확인하기'를 눌러야 구독이 완료됩니다. 메일이 안 보이면 스팸함도 확인해 주세요. " + reward
+    else:  # 메일 발송 설정 전 — 보냈다고 하지 않는다
+        msg = f"구독 신청을 받았습니다 ({email}). 확인 메일은 발송 준비가 끝나는 대로 보내 드립니다. 메일의 '구독 확인하기'를 눌러야 구독이 완료됩니다."
+    return {"ok": True, "message": msg, "reward_at": referral.REWARD_AT}
 
 
 @router.post("/subscribe/confirm")

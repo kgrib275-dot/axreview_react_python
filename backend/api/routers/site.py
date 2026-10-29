@@ -4,28 +4,24 @@ Streamlit 판 app_pages/home.py(_source_groups·히어로 수치)와 app_pages/a
 """
 from __future__ import annotations
 
-import time
 
 from fastapi import APIRouter
 
+from api.common import cached
 from pipeline import db, jobs, privacy
 
 router = APIRouter(tags=["site"])
 
-_cache: dict = {}
 
 
 def source_groups() -> dict[str, list[dict]]:
     """소스 그룹 → [{name, url}] (config/sources.yaml, 10분 캐시 — 파일을 매번 읽지 않게)."""
-    now = time.time()
-    hit = _cache.get("sources")
-    if hit and now - hit[0] < 600:
-        return hit[1]
-    groups: dict[str, list[dict]] = {}
-    for s in jobs.config()["sources"]:
-        groups.setdefault(s.get("group", "기타"), []).append({"name": s["name"], "url": s.get("site") or s["url"]})
-    _cache["sources"] = (now, groups)
-    return groups
+    def build():
+        groups: dict[str, list[dict]] = {}
+        for s in jobs.config()["sources"]:
+            groups.setdefault(s.get("group", "기타"), []).append({"name": s["name"], "url": s.get("site") or s["url"]})
+        return groups
+    return cached("site:sources", build, 600)
 
 
 def counts() -> dict:

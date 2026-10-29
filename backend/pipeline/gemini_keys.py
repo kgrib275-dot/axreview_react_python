@@ -31,8 +31,9 @@ def client(key: str):
     반환값은 호출하는 동안 지역 변수로 잡아 둬야 한다(가비지 수집되면 연결이 닫힘, 실측)."""
     from google import genai
     from google.genai import types
+    # timeout: 응답이 멈춘 호출이 서버의 작업 스레드를 붙잡고 있지 않게 (ms). 150건 묶음 채점도 보통 1분 안에 끝난다.
     return genai.Client(api_key=key, http_options=types.HttpOptions(
-        retry_options=types.HttpRetryOptions(attempts=1)))
+        timeout=120_000, retry_options=types.HttpRetryOptions(attempts=1)))
 
 
 def _entry(model: str, key: str) -> dict:

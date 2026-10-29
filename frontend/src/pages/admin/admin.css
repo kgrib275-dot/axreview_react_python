@@ -14,11 +14,11 @@
 .adm-token{max-width:460px;margin:40px auto}
 
 /* 작업 로그 (터미널 스타일 — 최신 줄이 아래, 스크롤이 항상 바닥) */
-.joblog{background:#030812;border:1px solid var(--line);border-radius:12px;padding:10px 12px;max-height:300px;overflow:auto;
+.joblog{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;max-height:300px;overflow:auto;
   display:flex;flex-direction:column-reverse;font:12px/1.65 var(--f-mono);margin:4px 0 8px}
 .joblog .ln{display:grid;grid-template-columns:auto auto 1fr;gap:10px;white-space:pre-wrap;word-break:break-all}
 .joblog .tm{color:var(--muted)} .joblog .lv{font-weight:600;color:var(--accent-2)}
-.joblog .WARNING .lv,.joblog .WARNING .msg{color:#fab219} .joblog .ERROR .lv,.joblog .ERROR .msg{color:#e66767}
+.joblog .WARNING .lv,.joblog .WARNING .msg{color:var(--warn-ink)} .joblog .ERROR .lv,.joblog .ERROR .msg{color:var(--danger)}
 .joblog .msg{color:var(--ink-2)} .joblog .empty{color:var(--muted)}
 .joblog .cursor{display:inline-block;width:7px;height:13px;background:var(--accent-2);vertical-align:-2px;animation:blink 1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
@@ -29,9 +29,9 @@
 
 /* 배지 */
 .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:.78rem;border:1px solid var(--line);background:var(--surface)}
-.badge.green{border-color:rgba(12,163,12,.6);color:#9be39b}
-.badge.red{border-color:rgba(255,80,80,.6);color:#ff9d9d}
-.badge.orange{border-color:rgba(250,178,25,.6);color:#ffd27a}
+.badge.green{border-color:rgba(12,163,12,.6);color:var(--ok-ink)}
+.badge.red{border-color:rgba(255,80,80,.6);color:var(--err-ink)}
+.badge.orange{border-color:rgba(250,178,25,.6);color:var(--orange-ink)}
 .badge.blue{border-color:rgba(46,155,234,.6);color:var(--accent-2)}
 .badges{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}
 
@@ -46,7 +46,7 @@
 .kv .k{color:var(--muted)}
 .json-sec{margin:8px 0}
 .json-sec h4{font-size:.9rem;margin:10px 0 4px;color:var(--accent-2)}
-pre.code{background:#030812;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:12px/1.6 var(--f-mono);overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ink-2)}
+pre.code{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:12px/1.6 var(--f-mono);overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ink-2)}
 
 /* 폼 보조 */
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
@@ -86,9 +86,9 @@ pre.code{background:#030812;border:1px solid var(--line);border-radius:10px;padd
 
 /* 토스트 */
 .toasts{position:fixed;right:18px;bottom:18px;z-index:200;display:flex;flex-direction:column;gap:8px}
-.toast{padding:10px 14px;border-radius:12px;background:var(--surface-2);border:1px solid var(--accent);font-size:.88rem;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:360px}
-.toast.err{border-color:#e66767}
-.toast.ok{border-color:#0ca30c}
+.toast{padding:10px 14px;border-radius:12px;background:var(--surface-2);border:1px solid var(--accent);font-size:.88rem;box-shadow:0 10px 30px var(--shadow);max-width:360px}
+.toast.err{border-color:var(--danger)}
+.toast.ok{border-color:var(--ok)}
 
 /* iframe */
 .adm-frame{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff}

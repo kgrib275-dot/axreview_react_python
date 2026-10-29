@@ -13,12 +13,12 @@
 
 /* 북마크 */
 .ax-bm{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
-  background:rgba(5,11,24,.55);border:1px solid var(--line);color:var(--muted);font-size:15px;cursor:pointer;z-index:2;transition:transform .15s,color .15s}
-.ax-bm:hover,.ax-bm:focus-visible{color:#fab219;transform:scale(1.08);outline:none;border-color:#fab219}
-.ax-bm.on{color:#fab219;border-color:rgba(250,178,25,.6)}
+  background:var(--bm-bg);border:1px solid var(--line);color:var(--muted);font-size:15px;cursor:pointer;z-index:2;transition:transform .15s,color .15s}
+.ax-bm:hover,.ax-bm:focus-visible{color:var(--warn-ink);transform:scale(1.08);outline:none;border-color:var(--warn-ink)}
+.ax-bm.on{color:var(--warn-ink);border-color:rgba(250,178,25,.6)}
 .bm-bar{display:flex;align-items:center;gap:10px;margin:4px 0 0;flex-wrap:wrap}
 .bm-bar button{all:unset;cursor:pointer;font-size:.8rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);background:var(--surface)}
-.bm-bar button.on{border-color:#fab219;color:#fde2a6}
+.bm-bar button.on{border-color:var(--warn-ink);color:var(--warn-soft)}
 .bm-bar span{color:var(--muted);font-size:.78rem}
 .bm-empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:14px;margin-top:10px}
 
@@ -28,7 +28,7 @@
 .kind{color:var(--muted)}
 .detail-h{font-family:var(--f-display);font-size:2rem;font-weight:800;line-height:1.35;margin:10px 0 12px;overflow-wrap:anywhere}
 .aud{display:flex;gap:6px;flex-wrap:wrap}
-.aud span{font-size:.72rem;padding:2px 9px;border-radius:999px;background:rgba(10,111,214,.16);color:#A9D6FF}
+.aud span{font-size:.72rem;padding:2px 9px;border-radius:999px;background:rgba(10,111,214,.16);color:var(--aud-ink)}
 .divider{border:none;border-top:1px solid var(--line);margin:18px 0}
 .note-body{line-height:1.8;color:var(--ink-2);font-size:.97rem;overflow-wrap:anywhere}
 .note-body h1,.note-body h2,.note-body h3,.note-body h4{color:var(--ink);margin:1.6em 0 .6em;scroll-margin-top:76px}

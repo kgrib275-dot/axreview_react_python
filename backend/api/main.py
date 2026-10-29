@@ -58,6 +58,34 @@ app = FastAPI(title="AX Review API", docs_url="/api/docs" if os.environ.get("AXR
               redoc_url=None, openapi_url="/api/openapi.json" if os.environ.get("AXREVIEW_DEBUG") else None, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# 보안 헤더 — 다른 사이트가 이 화면을 iframe 에 넣어 클릭을 가로채지 못하게(frame-ancestors), 형식 추측 금지 등.
+# 스크립트 출처 제한(CSP script-src)은 데이터 랩·지도 문서(srcdoc)의 인라인 스크립트와 카카오 SDK 때문에 넣지 않았다.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+}
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def _guard(request: Request, call_next):
+    # 위조 요청(CSRF) 차단 — 상태를 바꾸는 /api 요청은 우리 화면(api.ts)이 붙이는 X-Requested-With 가 있어야 한다.
+    # 다른 사이트의 페이지는 이 헤더를 붙이면 브라우저가 사전 확인(CORS)을 하고, 이 서버는 CORS 를 허용하지 않으므로 막힌다.
+    # 관리자 판정이 '이 PC(127.0.0.1)에서 온 요청'이라, 관리자가 이 PC에서 악성 페이지를 열면 몰래 관리자 IP 등록·발송이 되던 문제.
+    if request.method not in _SAFE_METHODS and request.url.path.startswith("/api/"):
+        site = request.headers.get("sec-fetch-site", "")
+        if request.headers.get("x-requested-with") != "axreview" or site not in ("", "same-origin", "none"):
+            return JSONResponse({"detail": "허용되지 않은 요청입니다. 화면을 새로고침한 뒤 다시 시도해 주세요."}, status_code=403)
+    response = await call_next(request)
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    if request.headers.get("x-forwarded-proto") == "https" or request.headers.get("tailscale-funnel-request"):
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
 
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception):
@@ -96,7 +124,22 @@ async def spa(path: str):
     file = DIST / path
     if path and file.is_file() and DIST in file.resolve().parents:
         return FileResponse(file)
-    index = DIST / "index.html"
-    if not index.exists():
+    html = _index_html()
+    if html is None:
         return HTMLResponse("<h1>AX Review</h1><p>프론트엔드를 아직 빌드하지 않았습니다: <code>cd frontend && npm run build</code></p>", status_code=503)
-    return HTMLResponse(og_meta.render(index.read_text(encoding="utf-8"), path), headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(og_meta.render(html, path), headers={"Cache-Control": "no-cache"})
+
+
+_index: dict = {}
+
+
+def _index_html() -> str | None:
+    """dist/index.html — 다시 빌드하면 바로 반영되도록 수정 시각이 바뀔 때만 다시 읽는다 (페이지마다 디스크를 읽지 않게)."""
+    index = DIST / "index.html"
+    try:
+        mtime = index.stat().st_mtime_ns
+    except FileNotFoundError:
+        return None
+    if _index.get("mtime") != mtime:
+        _index.update(mtime=mtime, html=index.read_text(encoding="utf-8"))
+    return _index["html"]

@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050B18" />
+    <script>
+      /* 화면 테마 — 첫 그림 전에 data-theme 를 건다 (깜빡임 방지). 값은 layout/Theme.tsx 가 저장한다. */
+      (function () {
+        try {
+          var t = localStorage.getItem("ax_theme");
+          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>AX Review — 기업 AI 전환 사례, 매주 3분 요약</title>
     <!-- 공유 미리보기(og:*) 메타는 서버가 응답할 때 backend/app/og_meta.py 가 페이지별로 넣는다 -->

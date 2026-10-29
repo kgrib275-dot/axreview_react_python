@@ -5,11 +5,11 @@ Streamlit 판 app_pages/today.py 를 옮겼다. 정답·해설은 답한 문항�
 from __future__ import annotations
 
 import re
-import time
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Body, HTTPException
 
+from api.common import cached
 from api.deps import Caller, CallerDep
 from app import geo_map, glossary
 from pipeline import db, engage, settings_store
@@ -17,17 +17,10 @@ from pipeline import db, engage, settings_store
 router = APIRouter(tags=["today"])
 
 _DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_cache: dict = {}
 
 
 def _cached(key: str, fn, ttl: int):
-    now = time.time()
-    hit = _cache.get(key)
-    if hit and now - hit[0] < ttl:
-        return hit[1]
-    val = fn()
-    _cache[key] = (now, val)
-    return val
+    return cached("today:" + key, fn, ttl)  # 만료 순간 한 요청만 다시 계산 (api/common.cached)
 
 
 def quiz_of(day_iso: str) -> list[dict]:
@@ -122,7 +115,8 @@ def answer_quiz(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     key = f"{d_iso}:{i}"
     if any(r["item"] == key for r in engage.mine("quiz", c.visitor, key)):
         raise HTTPException(status_code=400, detail="이미 답한 문항입니다.")
-    engage.record("quiz", key, choice, {"correct": int(choice == q["answer"])}, visitor=c.visitor)
+    if not engage.record("quiz", key, choice, {"correct": int(choice == q["answer"])}, visitor=c.visitor):
+        raise HTTPException(status_code=400, detail="이미 답한 문항입니다.")  # 더블클릭·동시 요청 — DB가 두 번째를 막았다
     return _mine(q, choice, engage.quiz_stats(d_iso), i)
 
 
@@ -137,6 +131,7 @@ def vote(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
         raise HTTPException(status_code=400, detail="보기 중에서 골라 주세요.")
     if any(r["item"] == d_iso for r in engage.mine("poll", c.visitor, d_iso)):
         raise HTTPException(status_code=400, detail="이미 투표했습니다.")
-    engage.record("poll", d_iso, choice, visitor=c.visitor)
+    if not engage.record("poll", d_iso, choice, visitor=c.visitor):
+        raise HTTPException(status_code=400, detail="이미 투표했습니다.")
     votes = engage.poll_votes(d_iso)
     return {"counts": {o: int(votes.get(o, 0)) for o in poll["options"]}, "mine": choice, "total": int(sum(votes.values()))}

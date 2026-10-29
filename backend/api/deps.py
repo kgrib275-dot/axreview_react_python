@@ -7,6 +7,7 @@ Streamlit 판의 streamlit_app.py / pipeline.settings_store / pipeline.engage �
 """
 from __future__ import annotations
 
+import hmac
 import os
 import uuid
 from dataclasses import dataclass
@@ -37,7 +38,7 @@ def _client_ip(request: Request) -> tuple[str | None, bool]:
 
 def is_admin(request: Request) -> bool:
     token = os.environ.get("ADMIN_TOKEN", "").strip()
-    if token and request.headers.get("x-admin-token", "") == token:
+    if token and hmac.compare_digest(request.headers.get("x-admin-token", "").encode(), token.encode()):  # 시간차로 토큰을 추측하지 못하게
         return True
     raw = request.client.host if request.client else None
     return settings_store.is_admin_request(raw, {k: v for k, v in request.headers.items()})
@@ -52,8 +53,8 @@ def caller(request: Request, response: Response) -> Caller:
         raw, resign = uuid.uuid4().hex, True
     if resign or request.headers.get("x-refresh-cookie"):
         new_cookie = engage.sign_cookie(raw)
-    if new_cookie:
-        response.set_cookie(COOKIE, new_cookie, max_age=COOKIE_MAX_AGE, samesite="lax", httponly=False,
+    if new_cookie:  # HttpOnly: 화면 JS 는 읽지 않는다 — 스크립트로 훔쳐 월 구독을 가로채지 못하게
+        response.set_cookie(COOKIE, new_cookie, max_age=COOKIE_MAX_AGE, samesite="lax", httponly=True,
                             secure=request.url.scheme == "https" or proxied, path="/")
     return Caller(visitor=engage.visitor_id(raw, ip), raw=raw, ip=ip, proxied=proxied, is_admin=is_admin(request),
                   new_cookie=new_cookie)

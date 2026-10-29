@@ -307,7 +307,8 @@ export function Bar({ v, max = 100, label }: { v: number; max?: number; label?: 
 }
 
 // ---------- 막대 차트 (라이브러리 없음) ----------
-const COLORS = ["#2E9BEA", "#5BC2F5", "#C9D3E3", "#0A6FD6", "#fab219", "#9be39b"];
+// 테마 토큰 — 다크에서는 예전 값(#2E9BEA·#5BC2F5·#C9D3E3·#0A6FD6·#fab219·#9be39b) 그대로
+const COLORS = ["var(--accent)", "var(--accent-2)", "var(--silver)", "var(--accent-deep)", "var(--warn-ink)", "var(--ok-ink)"];
 /** 묶음 세로 막대 — rows 의 labelKey 가 x축, series 가 각 막대. */
 export function Bars({ rows, labelKey, series, height = 240 }: { rows: Row[]; labelKey: string; series: string[]; height?: number }) {
   const max = Math.max(1, ...rows.flatMap((r) => series.map((s) => num(r[s]))));

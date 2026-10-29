@@ -62,7 +62,10 @@ def load_state(visitor: str) -> dict:
 def save_state(visitor: str, changes: dict) -> dict:
     """허용 키만 기존 값에 합쳐 저장한다. 값이 null 이면 그 키를 지운다. 빈 스냅샷은 저장하지 않는다."""
     conn = _conn()
+    conn.isolation_level = None
     try:
+        # 읽고-합치고-쓰기를 한 쓰기 트랜잭션으로 — 같은 방문자의 저장 두 개가 겹쳐도 한쪽 값이 사라지지 않게
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT data FROM visitor_state WHERE visitor=?", (visitor,)).fetchone()
         snap = {}
         if row:
@@ -82,15 +85,18 @@ def save_state(visitor: str, changes: dict) -> dict:
                 continue
             snap[k] = v
         # 고른 값이 없는 새 방문(봇 포함)은 저장하지 않는다 — 빈 행이 쌓이지 않게.
-        if not visitor or (not snap and not row):
-            return snap
-        data = json.dumps(snap, ensure_ascii=False)
-        if len(data) < MAX_BYTES:
-            conn.execute("INSERT INTO visitor_state (visitor, data, updated_at) VALUES (?,?,?) "
-                         "ON CONFLICT(visitor) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
-                         (visitor, data, datetime.now().isoformat(timespec="seconds")))
-            conn.commit()
+        if visitor and (snap or row):
+            data = json.dumps(snap, ensure_ascii=False)
+            if len(data) < MAX_BYTES:
+                conn.execute("INSERT INTO visitor_state (visitor, data, updated_at) VALUES (?,?,?) "
+                             "ON CONFLICT(visitor) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
+                             (visitor, data, datetime.now().isoformat(timespec="seconds")))
+        conn.execute("COMMIT")
         return snap
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
     finally:
         conn.close()
 
@@ -138,6 +144,6 @@ def erase(request: Request, response: Response, c: Caller = CallerDep) -> dict:
     """'내 기록 지우기' — 참여 기록·통계 프로필·화면 선택값을 지우고 새 방문자로 시작한다 (새 쿠키)."""
     n = engage.erase_visitor(c.visitor)
     fresh = engage.sign_cookie(uuid.uuid4().hex)
-    response.set_cookie(COOKIE, fresh, max_age=COOKIE_MAX_AGE, samesite="lax", httponly=False,
+    response.set_cookie(COOKIE, fresh, max_age=COOKIE_MAX_AGE, samesite="lax", httponly=True,
                         secure=request.url.scheme == "https" or c.proxied, path="/")
     return {"erased": n}

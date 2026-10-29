@@ -24,4 +24,4 @@
 .diag-bar{height:6px;border-radius:3px;background:var(--surface-2);margin:8px 0 10px;overflow:hidden}
 .diag-bar div{height:100%;background:#2E9BEA}
 .diag-next p{color:var(--ink-2);font-size:.88rem;line-height:1.6;margin:0}
-.diag-next p.diag-weak{color:#fab219;font-size:.78rem;margin:8px 0 0}
+.diag-next p.diag-weak{color:var(--warn-ink);font-size:.78rem;margin:8px 0 0}

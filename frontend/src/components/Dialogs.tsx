@@ -1,6 +1,6 @@
 // 구독·문의·월 구독 신청 대화상자 + 열기 함수를 주는 컨텍스트 (Layout 이 감싼다).
 // 수집 시점 고지(항목·목적·보유·거부권)와 만 14세 동의는 Streamlit 판 app/dialogs.py 와 같다.
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, post, track } from "../api";
 import { useMe } from "../me";
@@ -45,21 +45,31 @@ function SubscribeDialog({ source, onClose }: { source: string; onClose: () => v
   const [email, setEmail] = useState("");
   const [inds, setInds] = useState<string[]>([]);
   const [agree, setAgree] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string; suggest?: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const msgRef = useRef<HTMLDivElement>(null);
+  // 결과 문구가 대화상자 아래쪽(모바일에서 화면 밖)에 생겨 '아무 반응이 없는' 것처럼 보이지 않게 보이는 곳으로 옮긴다
+  useEffect(() => { if (msg) msgRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [msg]);
+  const send = async (addr: string, typoOk = false) => {
     if (!agree) return setMsg({ kind: "err", text: "만 14세 이상이며 개인정보 수집·이용에 동의해야 구독할 수 있습니다." });
     setBusy(true);
     try {
-      const r = await post<{ message: string }>("subscribe", { email: email.trim(), industries: inds, agree, source, ref: state.ref || "" });
+      const r = await post<{ message: string }>("subscribe", { email: addr, industries: inds, agree, source, ref: state.ref || "", typo_ok: typoOk });
       setMsg({ kind: "ok", text: r.message });
       setState({ subscribed: true, pref_inds: inds });
     } catch (err) {
-      setMsg({ kind: "err", text: (err as ApiError).message });
+      const e = err as ApiError;
+      setMsg({ kind: "err", text: e.message, suggest: typeof e.data?.suggest === "string" ? e.data.suggest : undefined });
     } finally {
       setBusy(false);
     }
+  };
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const addr = email.trim();
+    // 브라우저 기본 검사는 'a@b' 도 통과시킨다 — 점 있는 도메인까지 먼저 확인
+    if (!/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(addr)) return setMsg({ kind: "err", text: "이메일 주소 형식을 확인해 주세요. 예: name@company.com" });
+    return send(addr);
   };
   return (
     <Dialog title="매주 한 호, 메일로 받아 보세요" onClose={onClose}>
@@ -84,9 +94,17 @@ function SubscribeDialog({ source, onClose }: { source: string; onClose: () => v
         </div>
         <p className="caption"><b>개인정보 수집·이용 안내</b> · 항목: 이메일(필수), 관심 업종(선택) · 목적: 주간 뉴스레터 발송·구독 확인 · 보유: 구독 해지 시까지(해지 후 30일 이내 파기) · 동의를 거부할 수 있으며, 거부하면 구독할 수 없습니다. 메일은 발송 업체에 위탁해 보냅니다. <Link to="/privacy" onClick={onClose}>개인정보 처리방침</Link></p>
         <label className="check"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> 만 14세 이상이며 개인정보 수집·이용에 동의합니다 (필수)</label>
-        <button className="btn primary block" style={{ marginTop: 12 }} disabled={busy}>무료로 구독하기 →</button>
+        <div ref={msgRef}>
+          {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+          {msg?.suggest && (
+            <div className="btn-row" style={{ marginTop: 6 }}>
+              <button type="button" className="btn sm primary" disabled={busy} onClick={() => { setEmail(msg.suggest!); send(msg.suggest!); }}>{msg.suggest} 로 신청</button>
+              <button type="button" className="btn sm" disabled={busy} onClick={() => send(email.trim(), true)}>입력한 주소 그대로 신청</button>
+            </div>
+          )}
+        </div>
+        <button className="btn primary block" style={{ marginTop: 12 }} disabled={busy}>{busy ? "확인 중…" : "무료로 구독하기 →"}</button>
       </form>
-      {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
     </Dialog>
   );
 }

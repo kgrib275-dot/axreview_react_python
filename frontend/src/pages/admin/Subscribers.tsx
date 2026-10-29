@@ -90,7 +90,7 @@ function NewsletterTab() {
       </div>
       <JobStatus only={["newsletter"]} />
       <Expander title="메일 미리보기" open>
-        {html ? <iframe className="adm-frame" title="메일 미리보기" srcDoc={html} style={{ height: 720 }} /> : <p className="caption">미리보기가 없습니다.</p>}
+        {html ? <iframe className="adm-frame" title="메일 미리보기" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={html} style={{ height: 720 }} /> : <p className="caption">미리보기가 없습니다.</p>}
       </Expander>
       <h3 style={{ margin: "16px 0 8px" }}>발송 기록</h3>
       <DataTable rows={history} cols={history.length ? ["sent_at", "subject", "recipients", "failed", "trigger"].filter((c) => c in history[0]) : undefined} />

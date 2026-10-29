@@ -36,6 +36,7 @@ _SYNC_AFTER = {"collect", "draft", "weekly", "newsletter"}
 
 _state_lock = threading.Lock()
 _active: dict[str, str] = {}  # kind -> 시작 시각
+_LEASE_SEC = 3 * 3600  # 프로세스가 죽어 풀지 못한 잠금은 3시간 뒤 자동으로 풀린다
 
 
 def config() -> dict:
@@ -283,7 +284,8 @@ def newsletter(trigger: str = "수동", only_to: str | None = None) -> dict:
         recipients, subject,
         lambda token: mailer.build_html(issue, notes, token, pdf, industries=industry.parse((by_token.get(token) or {}).get("industries")),
                                         refer_key=(by_token.get(token) or {}).get("ref_key") or ""),
-        on_sent=None if only_to else (lambda e: db.mark_sent(send_key, hash_of(e))))
+        claim=None if only_to else (lambda e: db.claim_send(send_key, hash_of(e))),
+        release=None if only_to else (lambda e: db.release_send(send_key, hash_of(e))))
     if not only_to:
         db.record_newsletter(issue["id"] if issue else None, subject, len(recipients), len(failed), trigger)
     # 실패 주소는 작업 기록(→ Databricks)에 남기지 않고 건수만 — 개인정보
@@ -443,6 +445,10 @@ def start(kind: str, trigger: str = "수동", **kwargs) -> bool:
     with _state_lock:
         if kind in _active:
             return False
+        # 프로세스 밖까지 — 서버가 두 개 떠 있어도(2026-10-29 실제로 있었음) 같은 작업이 동시에 두 번 돌지 않게 DB에 잡는다
+        if not db.acquire_lease(f"job:{kind}", _LEASE_SEC):
+            log.warning("%s 은(는) 다른 서버 프로세스에서 실행 중이라 건너뜁니다", KIND_LABELS[kind])
+            return False
         _active[kind] = datetime.now().strftime("%H:%M:%S")
     joblog.begin(kind)
 
@@ -456,6 +462,7 @@ def start(kind: str, trigger: str = "수동", **kwargs) -> bool:
             log.error("■ %s 실패 (%.1fs): %s", KIND_LABELS[kind], time.perf_counter() - t0, str(e)[:200])
         finally:
             joblog.end(kind)
+            db.release_lease(f"job:{kind}")
             with _state_lock:
                 _active.pop(kind, None)
 

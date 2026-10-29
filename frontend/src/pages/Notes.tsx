@@ -39,8 +39,13 @@ export default function NotesPage() {
 function NoteDetail({ id }: { id: string }) {
   const { data, error, loading } = useLoad(() => get<Detail>(`notes/${id}`), [id]);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  const [pendingJump, setPendingJump] = useState<string | null>(null);
 
-  useEffect(() => { window.scrollTo(0, 0); }, [id]);
+  useEffect(() => { window.scrollTo(0, 0); setMore(false); }, [id]);
+  useEffect(() => {
+    if (more && pendingJump) { jumpTo(bodyRef.current, pendingJump); setPendingJump(null); }
+  }, [more, pendingJump]);
 
   if (error) return (
     <>
@@ -56,11 +61,16 @@ function NoteDetail({ id }: { id: string }) {
   const textLen = (n.body || n.body_html || "").replace(/<[^>]+>/g, "").length;
   const minutes = Math.max(1, Math.round(textLen / 600));
   const toc = n.toc || [];
+  // 긴 노트는 '요약·핵심 포인트'만 먼저 보이고 나머지(기술·운영 디테일·현업 실행·AX 적용)는 '자세히 보기'로 편다 — 3분 안에 핵심
+  const html = n.body_html || "";
+  const cut = textLen > 1500 ? nthIndex(html, "<h3", 3) : -1;
+  const head = cut > 0 && !more ? html.slice(0, cut) : html;
+  const restTitles = cut > 0 ? toc.slice(2) : [];
+  const headMin = Math.max(1, Math.round(head.replace(/<[^>]+>/g, "").length / 600));
 
   const jump = (want: string) => {
-    const hs = bodyRef.current?.querySelectorAll("h3") || [];
-    const h = Array.from(hs).find((x) => (x.textContent || "").trim().startsWith(want));
-    h?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    if (cut > 0 && !more && restTitles.some((t) => t === want)) { setMore(true); setPendingJump(want); return; }
+    jumpTo(bodyRef.current, want);
   };
 
   return (
@@ -78,12 +88,17 @@ function NoteDetail({ id }: { id: string }) {
 
       {/* 목차 칩 + 읽는 시간 (note_ui.detail_bar) */}
       <div className="nt-bar">
-        <span className="nt-read">약 {minutes}분 읽기</span>
+        <span className="nt-read">{cut > 0 ? `핵심 ${headMin}분 · 전체 ${minutes}분` : `약 ${minutes}분 읽기`}</span>
         {toc.map((h) => <button key={h} type="button" className="toc" onClick={() => jump(h)}>{h}</button>)}
       </div>
       <ShareBar url={data.share_url} title={n.title} />
       <hr className="divider" />
-      <div ref={bodyRef} className="note-body" dangerouslySetInnerHTML={{ __html: n.body_html || "" }} />
+      <div ref={bodyRef} className="note-body" dangerouslySetInnerHTML={{ __html: head }} />
+      {cut > 0 && !more && (
+        <button type="button" className="btn block" style={{ marginTop: 12 }} onClick={() => setMore(true)}>
+          자세히 보기 — {restTitles.join(" · ")} (+{Math.max(1, minutes - headMin)}분)
+        </button>
+      )}
       {n.url && <a className="btn" href={n.url} target="_blank" rel="noopener" style={{ marginTop: 14 }}>↗ 원문 보기</a>}
 
       {(data.prev || data.next) && (
@@ -241,4 +256,16 @@ function NoteList() {
       ) : null}
     </>
   );
+}
+
+function nthIndex(s: string, sub: string, n: number): number {
+  let i = -1;
+  for (let k = 0; k < n; k++) { i = s.indexOf(sub, i + 1); if (i < 0) return -1; }
+  return i;
+}
+
+function jumpTo(root: HTMLElement | null, want: string) {
+  const hs = root?.querySelectorAll("h3") || [];
+  const h = Array.from(hs).find((x) => (x.textContent || "").trim().startsWith(want));
+  h?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }

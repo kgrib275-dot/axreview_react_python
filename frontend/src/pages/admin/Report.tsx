@@ -57,7 +57,7 @@ export default function Report() {
           {preview && (
             <div>
               <h3>미리보기</h3>
-              <iframe className="adm-frame" title="리포트 미리보기" srcDoc={preview} style={{ height: 760 }} />
+              <iframe className="adm-frame" title="리포트 미리보기" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={preview} style={{ height: 760 }} />
             </div>
           )}
         </div>

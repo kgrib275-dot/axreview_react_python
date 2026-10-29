@@ -4,13 +4,13 @@
 .today-stats div{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 16px}
 .today-stats b{display:block;font-size:1.15rem}.today-stats span{font-size:.76rem;color:var(--muted)}
 .tod{display:flex;gap:14px;align-items:center;padding:14px 18px;border-radius:16px;margin:0 0 16px;text-decoration:none!important;
-  border:1px solid rgba(91,194,245,.4);background:linear-gradient(135deg,rgba(10,111,214,.18),rgba(11,23,48,.6))}
+  border:1px solid rgba(91,194,245,.4);background:linear-gradient(135deg,rgba(10,111,214,.18),var(--tint-end))}
 .tod .k{font-family:var(--f-mono);font-size:.7rem;color:var(--accent-2);letter-spacing:.08em}
 .tod b{display:block;font-size:1.1rem;color:var(--ink)}.tod p{margin:2px 0 0;color:var(--ink-2);font-size:.86rem;line-height:1.55}
 .tod em{font-style:normal;margin-left:auto;white-space:nowrap;color:var(--accent-2);font-size:.84rem}
 .poll-res{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;padding:12px 16px;border-radius:14px;margin-bottom:14px;
   border:1px solid rgba(250,178,25,.45);background:rgba(250,178,25,.07)}
-.poll-res span{font-size:.76rem;color:#fde2a6;font-family:var(--f-mono)}.poll-res em{font-style:normal;color:var(--ink-2);font-size:.84rem}
+.poll-res span{font-size:.76rem;color:var(--warn-soft);font-family:var(--f-mono)}.poll-res em{font-style:normal;color:var(--ink-2);font-size:.84rem}
 .quiz-card{margin:0 0 12px}
 .quiz-sub{color:var(--ink-2);margin:-4px 0 10px;font-size:.92rem}
 .opt-row{display:grid;gap:8px}
@@ -18,7 +18,7 @@
 .qopt{display:grid;grid-template-columns:minmax(0,14em) 1fr 3em;gap:10px;align-items:center;font-size:.86rem;color:var(--ink-2);padding:4px 0}
 .qopt .trk{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
 .qopt .fil{height:100%;border-radius:4px;background:#2E9BEA}
-.qopt.ans span{color:#9be39b;font-weight:700}.qopt.mine span{text-decoration:underline;text-underline-offset:3px}
+.qopt.ans span{color:var(--ok-ink);font-weight:700}.qopt.mine span{text-decoration:underline;text-underline-offset:3px}
 .qopt b{text-align:right;font-family:var(--f-mono)}.qmeta{color:var(--muted);font-size:.78rem;margin-top:8px}
 .quiz-done{display:flex;flex-direction:column;gap:2px;text-align:center;padding:18px;border-radius:16px;margin:6px 0 10px;
   background:linear-gradient(135deg,rgba(10,111,214,.25),rgba(91,194,245,.08));border:1px solid rgba(46,155,234,.4)}

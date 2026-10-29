@@ -22,6 +22,8 @@ router = APIRouter(tags=["notes"])
 
 SEMANTIC_MAX_CHARS = 200
 SEMANTIC_PER_DAY = 40
+SEMANTIC_PER_IP_DAY = 120  # 쿠키를 지우며 반복해도 IP로 묶는다 (회사 공용 IP를 고려해 방문자 한도보다 넉넉히)
+SEMANTIC_GLOBAL_DAY = 3000  # 전체 하루 — Gemini 키를 질문하기·수집과 같이 쓰므로 한 사람이 다 쓰지 못하게
 MIN_SIMILARITY = 0.6
 
 _sem_cache: dict[str, tuple[float, list[dict]]] = {}  # 같은 질의는 10분 동안 다시 임베딩하지 않는다
@@ -64,11 +66,15 @@ def list_notes(q: str = Query("", max_length=500), semantic: str = "", cats: str
         from pipeline import engage
         cached = _sem_cache.get(q.lower())
         fresh = not (cached and time.time() - cached[0] < 600)
-        if len(q) > SEMANTIC_MAX_CHARS or (fresh and engage.count_today("semantic", c.visitor) >= SEMANTIC_PER_DAY):
+        over = fresh and (engage.count_today("semantic", c.visitor) >= SEMANTIC_PER_DAY
+                          or db.access_count_today(c.ip, "semantic") >= SEMANTIC_PER_IP_DAY
+                          or db.access_count_today_all("semantic") >= SEMANTIC_GLOBAL_DAY)
+        if len(q) > SEMANTIC_MAX_CHARS or over:
             semantic_note = f"의미 검색 한도(질의 {SEMANTIC_MAX_CHARS}자 · 하루 {SEMANTIC_PER_DAY}회)를 넘어 단어 검색으로 찾았습니다."
         else:
             if fresh:
                 engage.record("semantic", visitor=c.visitor)  # 질의 내용은 남기지 않는다
+                db.record_access(c.ip, "의미 검색", "semantic")
             ranked = _cached(_sem_cache, q.lower(), lambda: vectorizer.search(q, "notes", top_k=30))
             if ranked:
                 used_semantic = True

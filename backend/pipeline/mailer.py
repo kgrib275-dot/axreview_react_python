@@ -143,9 +143,12 @@ def send_confirmation(email: str, confirm_token: str) -> bool:
     return ok == 1
 
 
-def send(recipients: list[tuple[str, str]], subject: str, html_for, on_sent=None) -> tuple[int, list[str]]:
+def send(recipients: list[tuple[str, str]], subject: str, html_for, on_sent=None, claim=None,
+         release=None) -> tuple[int, list[str]]:
     """recipients: (email, unsubscribe_token) 목록. html_for(token) -> 본문.
-    (성공 건수, 실패 주소 목록)을 반환한다. 연결은 한 번 열어 재사용한다."""
+    (성공 건수, 실패 주소 목록)을 반환한다. 연결은 한 번 열어 재사용한다.
+    claim(email) -> bool: 보내기 직전 '이 사람은 내가 보낸다'를 DB에 먼저 잡는다 — 서버 두 개가 같은 호를 동시에 보내도
+    한 사람이 두 번 받지 않게. False 면 건너뛴다. 보내다 실패하면 release(email)로 풀어 다음 실행에서 다시 보낸다."""
     cfg = smtp_config()
     if not is_configured():
         raise RuntimeError("SMTP 설정이 없습니다 (.env의 SMTP_HOST / SMTP_FROM)")
@@ -157,6 +160,8 @@ def send(recipients: list[tuple[str, str]], subject: str, html_for, on_sent=None
         if cfg["user"]:
             server.login(cfg["user"], cfg["password"])
         for email, token in recipients:
+            if claim and not claim(email):
+                continue  # 다른 실행이 이미 보냈거나 보내는 중
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = formataddr(("AX Review", cfg["sender"]))
@@ -168,8 +173,12 @@ def send(recipients: list[tuple[str, str]], subject: str, html_for, on_sent=None
                 if on_sent:
                     on_sent(email)  # 수신자별 기록 — 중간에 끊겨 다시 보낼 때 이미 받은 사람은 건너뛴다
             except smtplib.SMTPServerDisconnected:
+                if release:
+                    release(email)
                 failed.extend(e for e, _ in recipients[recipients.index((email, token)):])
                 break  # 연결이 끊기면 나머지는 실패로 두고 다음 실행에서 이어 보낸다
             except (smtplib.SMTPException, OSError):
+                if release:
+                    release(email)
                 failed.append(email)
     return ok, failed

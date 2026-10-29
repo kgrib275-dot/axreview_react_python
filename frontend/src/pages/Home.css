@@ -28,9 +28,9 @@
 .ticker:hover .ticker-run{animation-play-state:paused}
 .ticker-run a{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:.86rem;color:var(--ink-2);text-decoration:none}
 .ticker-run a:hover{color:var(--ink)}
-.ticker-run i{font-style:normal;font-size:.6rem;color:var(--accent-2)}.ticker-run i.up{color:#fab219;font-size:.7rem}
+.ticker-run i{font-style:normal;font-size:.6rem;color:var(--accent-2)}.ticker-run i.up{color:var(--warn-ink);font-size:.7rem}
 .ticker-run b{font-family:var(--f-mono);color:var(--ink);font-weight:600}
-.ticker-run em{font-style:normal;font-family:var(--f-mono);font-size:.72rem;color:#fab219}
+.ticker-run em{font-style:normal;font-family:var(--f-mono);font-size:.72rem;color:var(--warn-ink)}
 @keyframes ticker{to{transform:translateX(-50%)}}
 @media (prefers-reduced-motion:reduce){.ticker-run{animation:none;flex-wrap:wrap;width:auto}}
 
@@ -40,7 +40,7 @@
 .start a:hover{transform:translateY(-3px);border-color:var(--accent)}
 .start .n{font-family:var(--f-mono);font-size:.72rem;color:var(--accent-2)}
 .start b{color:var(--ink);font-size:1.02rem}.start span{color:var(--ink-2);font-size:.84rem;line-height:1.55}
-.start em{font-style:normal;font-size:.78rem;color:#fab219;margin-top:auto}
+.start em{font-style:normal;font-size:.78rem;color:var(--warn-ink);margin-top:auto}
 .start.foryou{grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));margin-bottom:22px}
 .start.foryou a{padding:14px 16px}
 

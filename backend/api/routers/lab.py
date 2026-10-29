@@ -5,28 +5,21 @@ React 화면은 iframe srcdoc 으로 띄운다. Streamlit 판 app_pages/lab.py·
 """
 from __future__ import annotations
 
-import time
 
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse
 
+from api.common import cached
 from api.deps import Caller, CallerDep
 from app import datalab, geo_map
 from pipeline import engage, knowledge, settings_store
 
 router = APIRouter(tags=["lab"])
 
-_cache: dict = {}
 
 
 def _cached(key: str, fn, ttl: int):
-    now = time.time()
-    hit = _cache.get(key)
-    if hit and now - hit[0] < ttl:
-        return hit[1]
-    val = fn()
-    _cache[key] = (now, val)
-    return val
+    return cached("lab:" + key, fn, ttl)  # 만료 순간 한 요청만 다시 계산 (api/common.cached)
 
 
 _HEADERS = {"Cache-Control": "private, max-age=120", "X-Content-Type-Options": "nosniff"}

@@ -1,0 +1,32 @@
+/* 화면 인터랙션 (src/fx.ts) — Streamlit 판 app/fx.py 의 CSS 를 일반 DOM 용으로 옮김 */
+#ax-spot{position:fixed;inset:0;pointer-events:none;z-index:-1;  /* 본문 뒤, 배경 위 */
+  background:radial-gradient(520px circle at var(--px,50%) var(--py,30%),rgba(46,155,234,.08),transparent 60%)}
+#ax-progress{position:fixed;left:0;right:0;top:0;height:2px;z-index:1000002;transform-origin:0 50%;transform:scaleX(0);
+  background:linear-gradient(90deg,#0A6FD6,#5BC2F5);box-shadow:0 0 12px rgba(91,194,245,.6);pointer-events:none}
+.hdr{transition:background .3s,box-shadow .3s}
+.hdr.ax-scrolled{box-shadow:0 8px 24px rgba(0,0,0,.25)}
+
+/* ② 카드 광택 — 마우스 위치(--mx,--my)를 따라가는 하이라이트 */
+a.card{position:relative;overflow:hidden;transform-style:preserve-3d;will-change:transform;
+  transition:transform .35s cubic-bezier(.2,.7,.2,1),border-color .25s,box-shadow .25s}
+a.card::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;
+  background:radial-gradient(360px circle at var(--mx,50%) var(--my,50%),rgba(91,194,245,.14),transparent 55%)}
+a.card:hover::before{opacity:1}
+a.card.ax-tilting{transition:transform .08s linear,border-color .25s,box-shadow .25s}
+
+/* ③ 스크롤 등장 */
+.ax-rv{opacity:0;transform:translateY(16px)}
+.ax-in{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1);transition-delay:calc(var(--d,0) * 70ms)}
+
+/* ⑥ 히어로 캔버스 — 캔버스가 붙으면 정적 네트워크 그림(network.svg)은 뺀다 */
+.hero canvas.ax-sphere{position:absolute;right:-2%;top:50%;transform:translateY(-50%);width:min(56%,620px);
+  aspect-ratio:1/1;z-index:-1;pointer-events:none}
+.hero.ax-has-canvas{background:
+  linear-gradient(90deg,rgba(5,11,24,.95) 0%,rgba(5,11,24,.6) 45%,rgba(5,11,24,0) 75%),
+  radial-gradient(600px circle at 78% 50%,rgba(10,111,214,.35),transparent 65%),var(--hero-bg,#0B1730)}
+
+@media (prefers-reduced-motion: reduce){.ax-rv{opacity:1;transform:none}a.card{transition:none}}
+@media (max-width:760px){
+  .hero canvas.ax-sphere{width:110%;right:-35%;opacity:.45}
+  #ax-spot{display:none}
+}

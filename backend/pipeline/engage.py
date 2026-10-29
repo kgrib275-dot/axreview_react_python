@@ -19,6 +19,7 @@ import json
 import random
 import re
 import secrets
+import threading
 from collections import Counter
 from datetime import date, datetime, timedelta
 
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS engagements (
 CREATE INDEX IF NOT EXISTS ix_eng_kind ON engagements(kind, created_at);
 CREATE INDEX IF NOT EXISTS ix_eng_visitor ON engagements(visitor, created_at);
 CREATE INDEX IF NOT EXISTS ix_eng_kind_item ON engagements(kind, item);
+CREATE INDEX IF NOT EXISTS ix_eng_created ON engagements(created_at);
 CREATE TABLE IF NOT EXISTS profiles (
   visitor TEXT PRIMARY KEY, gender TEXT NOT NULL DEFAULT '', age TEXT NOT NULL DEFAULT '',
   country TEXT NOT NULL DEFAULT '', region TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
@@ -46,11 +48,23 @@ CREATE TABLE IF NOT EXISTS daily_polls (
 _schema_ready: set[str] = set()
 
 
+# 한 사람이 한 번만 남기는 기록 — 더블클릭·동시 요청으로 두 줄이 생기지 않게 DB가 막는다 (통계가 부풀지 않게)
+ONCE_KINDS = ("quiz", "poll", "ref_visit")
+_ONCE_INDEX = ("CREATE UNIQUE INDEX IF NOT EXISTS ux_eng_once ON engagements(kind, visitor, item) "
+               "WHERE kind IN ('quiz','poll','ref_visit') AND visitor != ''")
+
+
 def _conn():
     # 스키마 확인은 프로세스당(DB 파일당) 한 번만 — 화면 한 번에 _conn이 수십 번 불려 매번 하면 쌓인다.
     conn = db.connect()
     if str(db.DB_PATH) not in _schema_ready:
         conn.executescript(SCHEMA)
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='ux_eng_once'").fetchone():
+            with conn:  # 이전에 생긴 중복은 첫 기록만 남기고 지운 뒤 유일 인덱스를 만든다
+                conn.execute("DELETE FROM engagements WHERE kind IN ('quiz','poll','ref_visit') AND visitor != '' AND id NOT IN "
+                             "(SELECT MIN(id) FROM engagements WHERE kind IN ('quiz','poll','ref_visit') AND visitor != '' "
+                             "GROUP BY kind, visitor, item)")
+                conn.execute(_ONCE_INDEX)
         _schema_ready.add(str(db.DB_PATH))
     return conn
 
@@ -63,12 +77,22 @@ _COOKIE_RE = re.compile(r"[0-9a-f]{16,64}")
 MAX_PER_VISITOR_DAY = 400  # 한 방문자가 하루에 남길 수 있는 참여 기록 수 (DB를 무한히 키우는 남용 방지)
 
 
+_secret_cache: dict[str, bytes] = {}
+_secret_lock = threading.Lock()
+
+
 def _secret() -> bytes:
-    """IP를 해시할 때 쓰는 비밀값 — 없으면 data/.visitor_secret에 만들어 둔다 (IP를 역추적할 수 없게)."""
+    """IP를 해시할 때 쓰는 비밀값 — 없으면 data/.visitor_secret에 만들어 둔다 (IP를 역추적할 수 없게).
+    요청마다 파일을 읽지 않게 메모리에 두고, 처음 만들 때 두 스레드가 서로 다른 값을 쓰지 않게 잠근다."""
     path = db.ROOT / "data" / ".visitor_secret"
-    if not path.exists():
-        path.write_text(secrets.token_hex(32), encoding="utf-8")
-    return path.read_text(encoding="utf-8").strip().encode()
+    key = str(path)
+    if key not in _secret_cache:
+        with _secret_lock:
+            if key not in _secret_cache:
+                if not path.exists():
+                    path.write_text(secrets.token_hex(32), encoding="utf-8")
+                _secret_cache[key] = path.read_text(encoding="utf-8").strip().encode()
+    return _secret_cache[key]
 
 
 def _sig(raw: str) -> str:
@@ -153,18 +177,20 @@ def attempt(kind: str, visitor: str, ip: str | None, per_visitor: int, per_ip: i
     return True
 
 
-def record(kind: str, item: str = "", value: str = "", extra=None, visitor: str = "") -> None:
+def record(kind: str, item: str = "", value: str = "", extra=None, visitor: str = "") -> bool:
+    """기록을 남긴다. 남겼으면 True — ONCE_KINDS 를 이미 남겼거나 하루 한도를 넘으면 False."""
     conn = _conn()
     try:
         n = conn.execute("SELECT COUNT(*) FROM engagements WHERE visitor=? AND created_at >= ?",
                          (visitor, today().isoformat())).fetchone()[0]
         if n >= MAX_PER_VISITOR_DAY:
-            return
+            return False
         item, value = str(item)[:200], str(value)[:200]
-        conn.execute("INSERT INTO engagements (kind, item, value, extra, visitor, created_at) VALUES (?,?,?,?,?,?)",
-                     (kind, item, value, json.dumps(extra, ensure_ascii=False) if extra is not None else "", visitor,
-                      datetime.now(db.KST).isoformat(timespec="seconds")))
+        cur = conn.execute("INSERT OR IGNORE INTO engagements (kind, item, value, extra, visitor, created_at) VALUES (?,?,?,?,?,?)",
+                           (kind, item, value, json.dumps(extra, ensure_ascii=False) if extra is not None else "", visitor,
+                            datetime.now(db.KST).isoformat(timespec="seconds")))
         conn.commit()
+        return cur.rowcount == 1
     finally:
         conn.close()
 
@@ -424,8 +450,30 @@ def _context(day: date) -> dict:
 
 
 def daily_quiz(day: date | None = None) -> list[dict]:
-    """그날의 3문항 [{q, sub, options, answer, why, url?}] — 날짜가 같으면 늘 같은 문제."""
+    """그날의 3문항 [{q, sub, options, answer, why, url?}] — 처음 만들 때 DB에 저장해 그날 안에서는 바뀌지 않는다.
+
+    문제는 최근 기사로 만드는데, 하루 중 수집이 돌면 기사 목록이 바뀌어 같은 날짜라도 문제가 달라질 수 있었다
+    (이미 낸 답이 다른 문제로 채점되거나, 열어 둔 화면에서 답하면 '보기 중에서 골라 주세요'). 투표(daily_polls)와 같은 방식."""
     day = day or today()
+    conn = _conn()
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS daily_quizzes (day TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL)")
+        r = conn.execute("SELECT data FROM daily_quizzes WHERE day=?", (day.isoformat(),)).fetchone()
+        if r:
+            return json.loads(r["data"])
+        quiz = _build_quiz(day)
+        if quiz:  # 기사가 없어 비면 저장하지 않는다 (수집 뒤 다시 만든다)
+            conn.execute("INSERT OR IGNORE INTO daily_quizzes (day, data, created_at) VALUES (?,?,?)",
+                         (day.isoformat(), json.dumps(quiz, ensure_ascii=False), datetime.now(db.KST).isoformat(timespec="seconds")))
+            conn.commit()
+            r = conn.execute("SELECT data FROM daily_quizzes WHERE day=?", (day.isoformat(),)).fetchone()  # 동시에 만든 쪽이 먼저면 그것
+            return json.loads(r["data"]) if r else quiz
+        return quiz
+    finally:
+        conn.close()
+
+
+def _build_quiz(day: date) -> list[dict]:
     rng = random.Random(f"axquiz:{day.isoformat()}")
     ctx = _context(day)
     order = _Q_TEMPLATES[:]
@@ -812,9 +860,9 @@ def seed_sample(visitors: int = 180, days: int = 14, seed: int = 28) -> int:
                 if rng.random() < .2:
                     ev.append(("share_visit", rng.choice(["type_test", "today"]), "", ""))
                 for kind, item, value, extra in ev:
-                    conn.execute("INSERT INTO engagements (kind, item, value, extra, visitor, created_at) VALUES (?,?,?,?,?,?)",
-                                 (kind, item, value, extra, vis, ts))
-                    n += 1
+                    # OR IGNORE: 날짜가 겹친 퀴즈·투표는 한 사람 한 번 (ux_eng_once)
+                    n += conn.execute("INSERT OR IGNORE INTO engagements (kind, item, value, extra, visitor, created_at) VALUES (?,?,?,?,?,?)",
+                                      (kind, item, value, extra, vis, ts)).rowcount
         conn.commit()
     finally:
         conn.close()
