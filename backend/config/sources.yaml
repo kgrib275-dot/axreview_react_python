@@ -1,0 +1,168 @@
+# config/sources.yaml — AX Review 수집 소스.
+# 각 소스의 group/site는 홈 화면 "어디서 찾아 읽나" 목록에 쓰인다. 수집 on/off는
+# 관리 > 수집 설정에서 바꾸며 data/settings.json에 저장된다.
+# (2026-10-27 실측: HBR·Microsoft AI·BCG·Deloitte·HBS WK·The Batch 피드는 응답 없음/404라 제외)
+# type: html — RSS가 없는 사이트를 목록 페이지 HTML로 읽는다(parser: hbr/bcg, pipeline/collectors/html_pages.py).
+
+pipeline:
+  dedup:
+    title_similarity_threshold: 88
+    title_recent_days: 7
+  gemini:
+    # 무료 등급 키는 모델별·프로젝트별 하루 요청 수가 매우 적다(2026-10-27 실측: gemini-2.5-flash 20회/일).
+    # 호출이 많은 채점·질문하기를 가벼운 모델로 돌리고 싶으면 아래 *_model 값을 바꾼다.
+    model: gemini-2.5-flash          # 기본값 (아래 항목이 비어 있으면 사용)
+    score_model: gemini-2.5-flash    # 수집 기사 AX 관련도 채점 (배치당 1회)
+    note_model: gemini-2.5-flash     # 노트 초안 (기사당 1회)
+    weekly_model: gemini-2.5-flash   # 주간 흐름 (주 1회)
+    chat_model: gemini-2.5-flash     # AX 질문하기·데일리 AI 종합 (질문당 1~3회)
+    score_batch_size: 150          # 수집 한 번의 기사를 요청 한 번에 (이보다 많을 때만 나눔)
+  # 기사 본문을 가져와 노트 초안에 넣을 최대 글자 수
+  article_max_chars: 15000
+
+sources:
+  # ── 기업·AX 리더 ──────────────────────────────────────────────
+  - {name: One Useful Thing (Ethan Mollick), group: "기업·AX 리더", type: rss, published_within_hours: 168,
+     site: "https://www.oneusefulthing.org/", url: "https://www.oneusefulthing.org/feed"}
+  - {name: Benedict Evans, group: "기업·AX 리더", type: rss, published_within_hours: 168,
+     site: "https://www.ben-evans.com/", url: "https://www.ben-evans.com/benedictevans?format=rss"}
+  - {name: Stratechery, group: "기업·AX 리더", type: rss, published_within_hours: 168,
+     site: "https://stratechery.com/", url: "https://stratechery.com/feed/"}
+
+  # ── 연구소·벤더 공식 ──────────────────────────────────────────
+  - {name: OpenAI 뉴스, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://openai.com/news/", url: "https://openai.com/news/rss.xml"}
+  - {name: Google DeepMind 블로그, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://deepmind.google/discover/blog/", url: "https://deepmind.google/blog/rss.xml"}
+  - {name: Google AI 블로그, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://blog.google/technology/ai/", url: "https://blog.google/technology/ai/rss/"}
+  - {name: Google Cloud 블로그, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://cloud.google.com/blog", url: "https://cloudblog.withgoogle.com/rss/"}
+  - {name: AWS 머신러닝 블로그, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://aws.amazon.com/blogs/machine-learning/", url: "https://aws.amazon.com/blogs/machine-learning/feed/"}
+  - {name: NVIDIA 블로그, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://blogs.nvidia.com/", url: "https://blogs.nvidia.com/feed/"}
+  - {name: Hugging Face 블로그, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://huggingface.co/blog", url: "https://huggingface.co/blog/feed.xml"}
+  - {name: Snowflake 블로그, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://www.snowflake.com/blog/", url: "https://www.snowflake.com/feed/"}
+  - {name: Databricks 블로그, group: "연구소·벤더 공식", type: rss, published_within_hours: 72,
+     site: "https://www.databricks.com/blog", url: "https://www.databricks.com/feed"}
+
+  # ── 경영·전략 매체 ────────────────────────────────────────────
+  - {name: MIT Sloan Management Review, group: "경영·전략 매체", type: rss, published_within_hours: 72,
+     site: "https://sloanreview.mit.edu/", url: "https://sloanreview.mit.edu/feed/"}
+  - {name: CIO Dive, group: "경영·전략 매체", type: rss, published_within_hours: 48,
+     site: "https://www.ciodive.com/", url: "https://www.ciodive.com/feeds/news/"}
+  - {name: CIO.com, group: "경영·전략 매체", type: rss, published_within_hours: 48,
+     site: "https://www.cio.com/", url: "https://www.cio.com/feed/"}
+  - {name: MIT Technology Review AI, group: "경영·전략 매체", type: rss, published_within_hours: 72,
+     site: "https://www.technologyreview.com/topic/artificial-intelligence/", url: "https://www.technologyreview.com/topic/artificial-intelligence/feed"}
+
+  # ── 리서치·보고서 ─────────────────────────────────────────────
+  - {name: McKinsey Insights, group: "리서치·보고서", type: rss, published_within_hours: 168,
+     site: "https://www.mckinsey.com/featured-insights", url: "https://www.mckinsey.com/insights/rss"}
+  # RSS가 없어 목록 페이지 HTML을 분석해 수집한다. BCG는 1~3주에 한 번 올라와서 30일 창(중복은 URL로 걸러짐).
+  - {name: Harvard Business Review, group: "리서치·보고서", type: html, parser: hbr, published_within_hours: 168,
+     site: "https://hbr.org/topic/subject/ai-and-machine-learning", url: "https://hbr.org/topic/subject/ai-and-machine-learning"}
+  - {name: BCG AI Insights, group: "리서치·보고서", type: html, parser: bcg, published_within_hours: 720, detail_limit: 8,
+     site: "https://www.bcg.com/capabilities/artificial-intelligence/insights", url: "https://www.bcg.com/capabilities/artificial-intelligence/insights"}
+
+  # ── 산업별 ────────────────────────────────────────────────────
+  - {name: Manufacturing Dive, group: "산업별", type: rss, published_within_hours: 48,
+     site: "https://www.manufacturingdive.com/", url: "https://www.manufacturingdive.com/feeds/news/"}
+  - {name: Insurance Journal, group: "산업별", type: rss, published_within_hours: 48,
+     site: "https://www.insurancejournal.com/", url: "https://www.insurancejournal.com/rss/news/"}
+  # Google 뉴스 검색 RSS — 특정 매체가 아니라 여러 매체에서 기업 AI 도입 기사를 넓게 잡는다.
+  - {name: Google 뉴스 (Enterprise AI), group: "산업별", type: rss, published_within_hours: 24,
+     site: "https://news.google.com/",
+     url: "https://news.google.com/rss/search?q=%22enterprise%20AI%22%20OR%20%22AI%20agents%22%20company&hl=en-US&gl=US&ceid=US:en"}
+
+  # ── 국내 ──────────────────────────────────────────────────────
+  - {name: AI타임스, group: "국내", type: rss, published_within_hours: 24,
+     site: "https://www.aitimes.com/", url: "https://www.aitimes.com/rss/allArticle.xml"}
+  - {name: 전자신문, group: "국내", type: rss, published_within_hours: 24,
+     site: "https://www.etnews.com/", url: "https://rss.etnews.com/Section901.xml"}
+  - {name: ZDNet Korea, group: "국내", type: rss, published_within_hours: 24,
+     site: "https://zdnet.co.kr/", url: "https://feeds.feedburner.com/zdkorea"}
+  - {name: 디일렉, group: "국내", type: rss, published_within_hours: 24,
+     site: "https://www.thelec.kr/", url: "https://www.thelec.kr/rss/allArticle.xml"}
+  - {name: Google 뉴스 (국내 AX), group: "국내", type: rss, published_within_hours: 24,
+     site: "https://news.google.com/",
+     url: "https://news.google.com/rss/search?q=AX%20%EA%B8%B0%EC%97%85%20AI&hl=ko&gl=KR&ceid=KR:ko"}
+  # 네이버 뉴스 검색 API — NAVER_CLIENT_ID/SECRET이 없으면 자동으로 건너뛴다.
+  - name: 네이버뉴스
+    group: "국내"
+    type: naver
+    site: "https://news.naver.com/"
+    published_within_hours: 24
+    display: 30
+    keywords: ["AX 전환", "AI 에이전트 도입", "제조 AI", "생성형 AI 도입", "AI 전환 기업", "AI", "인공지능"]  # 뒤 키워드는 AI_NEWS와 동일
+
+  # ── AI 일반·기술 (AI_NEWS 소스 이관) ─────────────────────────────
+  # AI_NEWS에서 쓰던 일반 AI·기술 소스. 키워드 필터 + AX 관련도 채점이 노트 후보를 걸러 준다.
+  # (OpenAI·DeepMind·Google AI·Hugging Face·NVIDIA·MIT TR·AI타임스·ZDNet Korea·전자신문·네이버는 위에 이미 있음)
+  - {"name": "TechCrunch AI", "group": "AI 일반·기술 (AI_NEWS)", "type": "rss", "published_within_hours": 24, "site": "https://techcrunch.com/category/artificial-intelligence/", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"}
+  - {"name": "The Verge AI", "group": "AI 일반·기술 (AI_NEWS)", "type": "rss", "published_within_hours": 24, "site": "https://www.theverge.com/ai-artificial-intelligence", "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"}
+  - {"name": "VentureBeat AI", "group": "AI 일반·기술 (AI_NEWS)", "type": "rss", "published_within_hours": 24, "site": "https://venturebeat.com/category/ai/", "url": "https://venturebeat.com/category/ai/feed/"}
+  - {"name": "Google News AI", "group": "AI 일반·기술 (AI_NEWS)", "type": "rss", "published_within_hours": 24, "site": "https://news.google.com/", "url": "https://news.google.com/rss/search?q=AI%20OR%20%22artificial%20intelligence%22&hl=en-US&gl=US&ceid=US:en"}
+  - {"name": "Wired AI", "group": "AI 일반·기술 (AI_NEWS)", "type": "rss", "published_within_hours": 24, "site": "https://www.wired.com/tag/ai/", "url": "https://www.wired.com/feed/tag/ai/latest/rss"}
+  - {"name": "Apple ML Research", "group": "AI 일반·기술 (AI_NEWS)", "type": "rss", "published_within_hours": 24, "site": "https://machinelearning.apple.com/", "url": "https://machinelearning.apple.com/rss.xml"}
+  - {"name": "Amazon Science", "group": "AI 일반·기술 (AI_NEWS)", "type": "rss", "published_within_hours": 24, "site": "https://www.amazon.science/", "url": "https://www.amazon.science/index.rss"}
+  - {"name": "ZDNet AI", "group": "AI 일반·기술 (AI_NEWS)", "type": "rss", "published_within_hours": 24, "site": "https://www.zdnet.com/topic/artificial-intelligence/", "url": "https://www.zdnet.com/topic/artificial-intelligence/rss.xml"}
+  - {"name": "arXiv", "group": "AI 일반·기술 (AI_NEWS)", "type": "arxiv", "published_within_hours": 24, "site": "https://arxiv.org/list/cs.AI/recent", "categories": ["cs.AI", "cs.CL", "cs.LG"], "max_results": 50}
+  - {"name": "HN", "group": "AI 일반·기술 (AI_NEWS)", "type": "hackernews", "published_within_hours": 24, "site": "https://news.ycombinator.com/", "min_points": 80, "query": "AI OR LLM OR Claude OR Gemini"}
+  - {"name": "Reddit", "group": "AI 일반·기술 (AI_NEWS)", "type": "reddit", "published_within_hours": 24, "site": "https://www.reddit.com/r/MachineLearning/", "subreddits": ["MachineLearning", "artificial", "LocalLLaMA", "singularity"], "min_score": 50, "limit": 25}
+  - {"name": "YouTube AI", "group": "AI 일반·기술 (AI_NEWS)", "type": "youtube", "published_within_hours": 24, "site": "https://www.youtube.com/", "channel_ids": ["UCbfYPyITQ-7l4upoX8nvctg", "UCSHZKyawb77ixDdsGog4iWA", "UCsBjURrPoezykLs9EqgamOA", "UChpleBmo18P08aKCIgti38g", "UCawZsQWqfGSbCI5yjkdVkTA", "UCKelCK4ZaO6HeEI1KQjqzWA", "UCHhYXsLBEVVnbvsq57n1MTQ", "UCNJ1Ymd5yFuUPtn21xtRbbw", "UCbY9xX3_jW5c2fjlZVBI4cg", "UCqcbQf6yw5KzRoDDcZ_wBSw", "UC2WmuBuFq6gL08QYG-JjXKw", "UCpV_X0VrL8-jg3t6wYGS-1g"]}
+
+  # ── 2026-10-28 추가 — tools/check_feeds.py로 응답·최근 글을 확인한 피드만 ─────────────
+  # (후보 69곳 중 404·403·RSS 아님 25곳, 2026-02 이후 새 글이 없는 The Gradient 제외)
+  # 연구소·벤더 공식
+  - {"name": "Microsoft Research 블로그", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 168, "site": "https://www.microsoft.com/en-us/research/blog/", "url": "https://www.microsoft.com/en-us/research/feed/"}
+  - {"name": "Google Research 블로그", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 168, "site": "https://research.google/blog/", "url": "https://research.google/blog/rss/"}
+  - {"name": "NVIDIA 테크니컬 블로그", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 72, "site": "https://developer.nvidia.com/blog", "url": "https://developer.nvidia.com/blog/feed"}
+  - {"name": "AWS 뉴스 블로그", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 72, "site": "https://aws.amazon.com/blogs/aws/", "url": "https://aws.amazon.com/blogs/aws/feed/"}
+  - {"name": "Azure 블로그", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 72, "site": "https://azure.microsoft.com/en-us/blog/", "url": "https://azure.microsoft.com/en-us/blog/feed/"}
+  - {"name": "Cloudflare 블로그", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 72, "site": "https://blog.cloudflare.com/", "url": "https://blog.cloudflare.com/rss/"}
+  - {"name": "GitHub 블로그 AI", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 168, "site": "https://github.blog/ai-and-ml/", "url": "https://github.blog/ai-and-ml/feed/"}
+  - {"name": "SAP News", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 72, "site": "https://news.sap.com/", "url": "https://news.sap.com/feed/"}
+  - {"name": "Palantir 블로그", "group": "연구소·벤더 공식", "type": "rss", "published_within_hours": 168, "site": "https://blog.palantir.com/", "url": "https://blog.palantir.com/feed"}
+  # 기업·AX 리더
+  - {"name": "Import AI (Jack Clark)", "group": "기업·AX 리더", "type": "rss", "published_within_hours": 240, "site": "https://importai.substack.com/", "url": "https://importai.substack.com/feed"}
+  - {"name": "Interconnects (Nathan Lambert)", "group": "기업·AX 리더", "type": "rss", "published_within_hours": 240, "site": "https://www.interconnects.ai/", "url": "https://www.interconnects.ai/feed"}
+  - {"name": "Latent Space", "group": "기업·AX 리더", "type": "rss", "published_within_hours": 240, "site": "https://www.latent.space/", "url": "https://www.latent.space/feed"}
+  - {"name": "Exponential View (Azeem Azhar)", "group": "기업·AX 리더", "type": "rss", "published_within_hours": 240, "site": "https://www.exponentialview.co/", "url": "https://www.exponentialview.co/feed"}
+  - {"name": "Ahead of AI (Sebastian Raschka)", "group": "기업·AX 리더", "type": "rss", "published_within_hours": 240, "site": "https://magazine.sebastianraschka.com/", "url": "https://magazine.sebastianraschka.com/feed"}
+  - {"name": "Simon Willison", "group": "기업·AX 리더", "type": "rss", "published_within_hours": 72, "site": "https://simonwillison.net/", "url": "https://simonwillison.net/atom/everything/"}
+  - {"name": "Platformer", "group": "기업·AX 리더", "type": "rss", "published_within_hours": 168, "site": "https://www.platformer.news/", "url": "https://www.platformer.news/rss/"}
+  - {"name": "Last Week in AI", "group": "기업·AX 리더", "type": "rss", "published_within_hours": 240, "site": "https://lastweekin.ai/", "url": "https://lastweekin.ai/feed"}
+  # 리서치·보고서
+  - {"name": "Forrester 블로그", "group": "리서치·보고서", "type": "rss", "published_within_hours": 168, "site": "https://www.forrester.com/blogs/", "url": "https://www.forrester.com/blogs/feed/"}
+  # 학술·저널
+  - {"name": "Berkeley BAIR 블로그", "group": "학술·저널", "type": "rss", "published_within_hours": 240, "site": "https://bair.berkeley.edu/blog/", "url": "https://bair.berkeley.edu/blog/feed.xml"}
+  - {"name": "Nature Machine Intelligence", "group": "학술·저널", "type": "rss", "published_within_hours": 240, "site": "https://www.nature.com/natmachintell/", "url": "https://www.nature.com/natmachintell.rss"}
+  - {"name": "Nature 뉴스", "group": "학술·저널", "type": "rss", "published_within_hours": 72, "site": "https://www.nature.com/", "url": "https://www.nature.com/nature.rss"}
+  - {"name": "Science 뉴스", "group": "학술·저널", "type": "rss", "published_within_hours": 72, "site": "https://www.science.org/news", "url": "https://www.science.org/rss/news_current.xml"}
+  - {"name": "IEEE Spectrum AI", "group": "학술·저널", "type": "rss", "published_within_hours": 168, "site": "https://spectrum.ieee.org/topic/artificial-intelligence/", "url": "https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss"}
+  # 산업별
+  - {"name": "Call Centre Helper", "group": "산업별", "type": "rss", "published_within_hours": 72, "site": "https://www.callcentrehelper.com/", "url": "https://www.callcentrehelper.com/feed"}
+  - {"name": "No Jitter", "group": "산업별", "type": "rss", "published_within_hours": 48, "site": "https://www.nojitter.com/", "url": "https://www.nojitter.com/rss.xml"}
+  - {"name": "Banking Dive", "group": "산업별", "type": "rss", "published_within_hours": 48, "site": "https://www.bankingdive.com/", "url": "https://www.bankingdive.com/feeds/news/"}
+  - {"name": "Retail Dive", "group": "산업별", "type": "rss", "published_within_hours": 48, "site": "https://www.retaildive.com/", "url": "https://www.retaildive.com/feeds/news/"}
+  - {"name": "Supply Chain Dive", "group": "산업별", "type": "rss", "published_within_hours": 48, "site": "https://www.supplychaindive.com/", "url": "https://www.supplychaindive.com/feeds/news/"}
+  - {"name": "HR Dive", "group": "산업별", "type": "rss", "published_within_hours": 48, "site": "https://www.hrdive.com/", "url": "https://www.hrdive.com/feeds/news/"}
+  - {"name": "Google 뉴스 (Contact Center AI)", "group": "산업별", "type": "rss", "published_within_hours": 24, "site": "https://news.google.com/", "url": "https://news.google.com/rss/search?q=%22contact%20center%22%20AI%20OR%20%22customer%20service%22%20%22AI%20agent%22&hl=en-US&gl=US&ceid=US:en"}
+  - {"name": "Google 뉴스 (AI 컨택센터·고객센터)", "group": "산업별", "type": "rss", "published_within_hours": 24, "site": "https://news.google.com/", "url": "https://news.google.com/rss/search?q=AI%20%EC%BB%A8%ED%83%9D%EC%84%BC%ED%84%B0%20OR%20AI%20%EA%B3%A0%EA%B0%9D%EC%84%BC%ED%84%B0%20OR%20AICC&hl=ko&gl=KR&ceid=KR:ko"}
+  - {"name": "Google 뉴스 (제조 AI·스마트팩토리)", "group": "산업별", "type": "rss", "published_within_hours": 24, "site": "https://news.google.com/", "url": "https://news.google.com/rss/search?q=%EC%8A%A4%EB%A7%88%ED%8A%B8%ED%8C%A9%ED%86%A0%EB%A6%AC%20AI%20OR%20%EC%A0%9C%EC%A1%B0%20AI%20%EB%8F%84%EC%9E%85&hl=ko&gl=KR&ceid=KR:ko"}
+  - {"name": "Google 뉴스 (금융 AI 에이전트)", "group": "산업별", "type": "rss", "published_within_hours": 24, "site": "https://news.google.com/", "url": "https://news.google.com/rss/search?q=%EA%B8%88%EC%9C%B5%20AI%20%EC%97%90%EC%9D%B4%EC%A0%84%ED%8A%B8%20OR%20%EC%9D%80%ED%96%89%20%EC%83%9D%EC%84%B1%ED%98%95%20AI&hl=ko&gl=KR&ceid=KR:ko"}
+  # 국내
+  - {"name": "바이라인네트워크", "group": "국내", "type": "rss", "published_within_hours": 24, "site": "https://byline.network/", "url": "https://byline.network/feed/"}
+  - {"name": "블로터", "group": "국내", "type": "rss", "published_within_hours": 24, "site": "https://www.bloter.net/", "url": "https://www.bloter.net/rss/allArticle.xml"}
+  - {"name": "테크M", "group": "국내", "type": "rss", "published_within_hours": 24, "site": "https://www.techm.kr/", "url": "https://www.techm.kr/rss/allArticle.xml"}
+  - {"name": "매일경제 IT·과학", "group": "국내", "type": "rss", "published_within_hours": 24, "site": "https://www.mk.co.kr/news/it/", "url": "https://www.mk.co.kr/rss/50200011/"}
+  - {"name": "한국경제 IT", "group": "국내", "type": "rss", "published_within_hours": 24, "site": "https://www.hankyung.com/it", "url": "https://www.hankyung.com/feed/it"}
+  - {"name": "네이버 D2", "group": "국내", "type": "rss", "published_within_hours": 240, "site": "https://d2.naver.com/", "url": "https://d2.naver.com/d2.atom"}
+  - {"name": "카카오 테크", "group": "국내", "type": "rss", "published_within_hours": 240, "site": "https://tech.kakao.com/", "url": "https://tech.kakao.com/feed/"}
+  - {"name": "토스 테크", "group": "국내", "type": "rss", "published_within_hours": 240, "site": "https://toss.tech/", "url": "https://toss.tech/rss.xml"}
+  - {"name": "당근 테크", "group": "국내", "type": "rss", "published_within_hours": 240, "site": "https://medium.com/daangn", "url": "https://medium.com/feed/daangn"}
+  - {"name": "Google 뉴스 (AI 거버넌스·AI 기본법)", "group": "국내", "type": "rss", "published_within_hours": 24, "site": "https://news.google.com/", "url": "https://news.google.com/rss/search?q=AI%20%EA%B8%B0%EB%B3%B8%EB%B2%95%20OR%20AI%20%EA%B1%B0%EB%B2%84%EB%84%8C%EC%8A%A4%20%EA%B8%B0%EC%97%85&hl=ko&gl=KR&ceid=KR:ko"}

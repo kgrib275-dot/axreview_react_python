@@ -1,0 +1,53 @@
+/* 노트 목록·상세 전용 — Streamlit 판 app/note_ui.py 의 _CSS 와 theme.py 의 .detail-h/.note-nav/.badge/.aud 를 옮김. */
+
+/* 필터 줄 */
+.note-filters{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:flex-end;margin:4px 0 8px}
+.note-filters .field{margin-bottom:8px;min-width:0;max-width:100%}
+.note-filters .f-q{flex:1 1 260px}
+.note-filters .f-sem{margin-bottom:18px;white-space:nowrap}
+.note-filters .btn-row{gap:6px}
+
+/* 목차 칩 */
+.nt-bar .toc{all:unset;cursor:pointer;font-size:.8rem;padding:5px 11px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);background:var(--surface)}
+.nt-bar .toc:hover,.nt-bar .toc:focus-visible{border-color:var(--accent);color:var(--ink)}
+
+/* 북마크 */
+.ax-bm{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(5,11,24,.55);border:1px solid var(--line);color:var(--muted);font-size:15px;cursor:pointer;z-index:2;transition:transform .15s,color .15s}
+.ax-bm:hover,.ax-bm:focus-visible{color:#fab219;transform:scale(1.08);outline:none;border-color:#fab219}
+.ax-bm.on{color:#fab219;border-color:rgba(250,178,25,.6)}
+.bm-bar{display:flex;align-items:center;gap:10px;margin:4px 0 0;flex-wrap:wrap}
+.bm-bar button{all:unset;cursor:pointer;font-size:.8rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);background:var(--surface)}
+.bm-bar button.on{border-color:#fab219;color:#fde2a6}
+.bm-bar span{color:var(--muted);font-size:.78rem}
+.bm-empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:14px;margin-top:10px}
+
+/* 상세 */
+.detail-meta{display:flex;gap:8px;margin-top:18px;align-items:center;font-size:.8rem}
+.badge{font-family:var(--f-mono);color:var(--accent-2);border:1px solid rgba(91,194,245,.35);border-radius:6px;padding:1px 8px}
+.kind{color:var(--muted)}
+.detail-h{font-family:var(--f-display);font-size:2rem;font-weight:800;line-height:1.35;margin:10px 0 12px;overflow-wrap:anywhere}
+.aud{display:flex;gap:6px;flex-wrap:wrap}
+.aud span{font-size:.72rem;padding:2px 9px;border-radius:999px;background:rgba(10,111,214,.16);color:#A9D6FF}
+.divider{border:none;border-top:1px solid var(--line);margin:18px 0}
+.note-body{line-height:1.8;color:var(--ink-2);font-size:.97rem;overflow-wrap:anywhere}
+.note-body h1,.note-body h2,.note-body h3,.note-body h4{color:var(--ink);margin:1.6em 0 .6em;scroll-margin-top:76px}
+.note-body h3{font-size:1.15rem}
+.note-body p{margin:.6em 0}
+.note-body strong{color:var(--ink)}
+.note-body ul,.note-body ol{padding-left:22px}
+.note-body li{margin:.25em 0}
+.note-body blockquote{margin:1em 0;padding:8px 14px;border-left:3px solid var(--accent-2);background:rgba(10,111,214,.08);border-radius:0 10px 10px 0}
+.note-body code{font-family:var(--f-mono);font-size:.86em;background:var(--surface-2);padding:1px 5px;border-radius:5px}
+.note-body pre{overflow:auto;background:var(--surface-2);padding:12px 14px;border-radius:10px}
+.note-body table{border-collapse:collapse;width:100%;font-size:.9rem;display:block;overflow:auto}
+.note-body th,.note-body td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+.note-body img{border-radius:10px}
+.note-nav{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:28px}
+.note-nav a{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface);text-decoration:none!important;transition:border-color .2s,transform .2s;min-width:0}
+.note-nav a:hover{border-color:var(--accent);transform:translateY(-2px)}
+.note-nav span{font-size:.74rem;color:var(--accent-2);font-family:var(--f-mono)}
+.note-nav b{font-size:.9rem;color:var(--ink);font-weight:600;line-height:1.45}
+.note-nav .nav-next{grid-column:2;text-align:right}
+@media (max-width:640px){.note-nav{grid-template-columns:1fr}.note-nav .nav-next{grid-column:auto}}
+@media (max-width:760px){.detail-h{font-size:1.5rem}}

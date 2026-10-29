@@ -1,0 +1,178 @@
+"""관리 화면에서 바꾸는 운영 설정 (data/settings.json).
+
+AI_NEWS는 설정마다 JSON 파일을 따로 뒀지만, 여기서는 한 파일에 섹션으로 모은다.
+"""
+from __future__ import annotations
+
+import json
+import re
+import threading
+import uuid
+from copy import deepcopy
+
+from .db import ROOT
+
+SETTINGS_FILE = ROOT / "data" / "settings.json"
+TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
+
+DEFAULTS = {
+    "enabled_sources": None,  # None = config/sources.yaml의 전체 소스
+    # 무료 Gemini는 키당 하루 약 20회 — 수집(채점)은 하루 3~4번이면 충분하다. 17:30은 한도가 풀린(태평양 자정) 뒤.
+    "collection": {"enabled": False, "times": ["08:00", "11:00", "14:00", "17:30"]},
+    "drafting": {"enabled": False, "times": ["07:30", "13:30"], "per_run": 5, "min_score": 4},
+    "weekly": {"enabled": False, "weekday": 0, "time": "08:00", "auto_publish": False},
+    "newsletter": {"enabled": False, "weekday": 0, "time": "09:00"},
+    "vectorize": {"enabled": False, "times": ["08:00", "14:00"]},
+    "teams": {"enabled": False, "weekday": 0, "time": "09:30"},
+    "webhooks": [],  # [{"id", "name", "url", "enabled"}]
+    # 공개 'AX 질문하기' — 인터넷에 공개되므로 Gemini 호출 남용을 막는 한도를 둔다.
+    # free_daily: 무료 방문자 하루 질문 수, member_daily: 월 구독자 하루 질문 수 (pipeline/membership.py).
+    # per_ip_daily는 무료 방문자에게만 적용한다 (쿠키를 지워 무료 한도를 다시 받는 것 방지, 구독자는 회사 공용 IP일 수 있음).
+    "ask": {"enabled": True, "free_daily": 3, "member_daily": 30, "per_ip_daily": 10, "global_daily": 40,
+            "web_search": True, "plan_price": ""},
+    # 편집 관점 (pipeline/editorial.py) — '리더가 알아야 할 3가지' 선정과 본문 색 강조에 쓴다.
+    "lens": {"stance": "현업 리더가 이번 주 바로 움직일 수 있는 것만 고릅니다.",
+             "focus": ["에이전트", "보안", "거버넌스", "데이터", "비용", "온톨로지"],
+             "industries": ["제조", "금융", "고객센터", "IT 서비스"], "audience": "현업 리더"},
+    "admin_ips": [],
+    "warehouse": {"auto_sync": True},
+    "engage": {"sample_on_map": True},  # 공개 참여 지도에 예시(가상) 데이터를 함께 보여 줄지 (배지로 표시)  # Databricks 설정이 있으면 수집·초안·주간 흐름·발송 뒤 자동 적재
+}
+
+_lock = threading.Lock()
+
+
+def load() -> dict:
+    try:
+        saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        saved = {}
+    cfg = deepcopy(DEFAULTS)
+    for key, val in saved.items():
+        if isinstance(val, dict) and isinstance(cfg.get(key), dict):
+            cfg[key].update(val)
+        else:
+            cfg[key] = val
+    return cfg
+
+
+def save_section(key: str, value) -> None:
+    with _lock:
+        cfg = load()
+        cfg[key] = value
+        SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SETTINGS_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def enabled_sources(all_names: list[str]) -> list[str]:
+    names = load()["enabled_sources"]
+    return all_names if names is None else [n for n in names if n in all_names]
+
+
+def parse_times(raw: str) -> tuple[list[str], list[str]]:
+    """'/'로 구분된 HH:MM 문자열을 파싱한다. (유효한 시각 목록, 잘못된 입력 목록)을 반환."""
+    valid, invalid = [], []
+    for part in raw.split("/"):
+        t = part.strip()
+        if not t:
+            continue
+        if TIME_RE.match(t):
+            if t not in valid:
+                valid.append(t)
+        else:
+            invalid.append(t)
+    return sorted(valid), invalid
+
+
+# ───────────── 관리자 IP (AI_NEWS와 같은 방식) ─────────────
+
+LOCAL_IPS = {None, "", "127.0.0.1", "::1", "localhost"}
+
+
+def add_admin_ip(label: str, ip: str) -> None:
+    admins = load()["admin_ips"]
+    admins.append({"id": uuid.uuid4().hex, "label": label, "ip": ip})
+    save_section("admin_ips", admins)
+
+
+def delete_admin_ip(admin_id: str) -> None:
+    save_section("admin_ips", [a for a in load()["admin_ips"] if a["id"] != admin_id])
+
+
+def is_admin_ip(ip: str | None) -> bool:
+    """로컬 접속은 항상 관리자다. 원격은 등록된 IP만 통과한다 — AI_NEWS는 목록이 비면
+    누구나 통과시켰지만, 사내망에 띄우는 사이트라 원격 부트스트랩은 막았다."""
+    if ip in LOCAL_IPS:
+        return True
+    return any(a["ip"] == ip for a in load()["admin_ips"])
+
+
+_PROXY_HEADERS = ("x-forwarded-for", "forwarded", "x-forwarded-host", "tailscale-funnel-request")
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
+
+
+_LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def client_ip(ip: str | None, headers: dict[str, str]) -> tuple[str | None, bool]:
+    """(실제 접속자 IP, 프록시 경유 여부).
+
+    Tailscale Funnel로 공개하면 모든 요청이 로컬 프록시(127.0.0.1)에서 들어온다. 그대로
+    is_admin_ip에 넣으면 인터넷의 누구나 관리자가 되므로, 프록시 헤더가 있거나 Host가
+    localhost가 아니면 원격 요청으로 보고 X-Forwarded-For의 마지막 IP(프록시가 붙인 값)를 쓴다.
+    """
+    lower = {k.lower(): v for k, v in headers.items()}
+    raw_host = lower.get("host", "")
+    # "[::1]:4002" 같은 IPv6 표기는 대괄호까지가 호스트다.
+    host = raw_host[: raw_host.find("]") + 1] if raw_host.startswith("[") else raw_host.rsplit(":", 1)[0]
+    if ip and ip not in _LOOPBACK:
+        # 로컬 프록시를 거치지 않고 직접 붙은 요청(같은 네트워크 등) — 보낸 헤더는 위조할 수 있으니 실제 접속 IP만 쓴다.
+        return ip, True
+    proxied = any(h in lower for h in _PROXY_HEADERS) or host not in _LOCAL_HOSTS
+    if not proxied:
+        return ip, False
+    # 접속자가 보낸 X-Forwarded-For 뒤에 프록시가 실제 IP를 덧붙이므로 마지막 값만 믿는다 (앞쪽은 위조 가능).
+    forwarded = lower.get("x-forwarded-for", "").split(",")[-1].strip()
+    return forwarded or None, True
+
+
+def is_admin_request(ip: str | None, headers: dict[str, str]) -> bool:
+    real_ip, proxied = client_ip(ip, headers)
+    if proxied:
+        # 프록시 경유 요청은 "로컬"로 취급하지 않는다 — 등록된 IP만 관리자.
+        return bool(real_ip) and any(a["ip"] == real_ip for a in load()["admin_ips"])
+    return is_admin_ip(real_ip)
+
+
+# ───────────── Teams 웹훅 (AI_NEWS settings_store와 같은 방식) ─────────────
+
+WEBHOOK_HOSTS = (".webhook.office.com", ".logic.azure.com", ".powerplatform.com", ".powerautomate.com")
+
+
+def webhook_url_ok(url: str) -> bool:
+    """Teams(Power Automate·Logic Apps) 웹훅 주소만 허용 — 임의 주소로 서버가 요청을 보내지 않게."""
+    from urllib.parse import urlsplit
+    parts = urlsplit(url.strip())
+    host = (parts.hostname or "").lower()
+    return parts.scheme == "https" and any(host.endswith(h) for h in WEBHOOK_HOSTS)
+
+
+def add_webhook(name: str, url: str) -> None:
+    if not webhook_url_ok(url):
+        raise ValueError("Teams 웹훅 주소(https://…webhook.office.com 등)만 등록할 수 있습니다.")
+    hooks = load()["webhooks"]
+    hooks.append({"id": uuid.uuid4().hex, "name": name, "url": url, "enabled": True})
+    save_section("webhooks", hooks)
+
+
+def update_webhook(webhook_id: str, **fields) -> None:
+    hooks = load()["webhooks"]
+    for w in hooks:
+        if w["id"] == webhook_id:
+            w.update(fields)
+    save_section("webhooks", hooks)
+
+
+def delete_webhook(webhook_id: str) -> None:
+    save_section("webhooks", [w for w in load()["webhooks"] if w["id"] != webhook_id])

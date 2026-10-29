@@ -1,0 +1,124 @@
+/* 홈 전용 스타일 — Streamlit 판 app/theme.py 의 .st-key-hero/.start/.ticker/.week/.flow/.l3/.cat-nav/.cta 를 일반 DOM 용으로 옮김.
+   소개(About)·뉴스레터(Letter) 도 숫자 띠·흐름선·2단 배치를 여기서 같이 쓴다. */
+
+/* ---------- 히어로 ---------- */
+.hero{position:relative;overflow:hidden;border-radius:24px;border:1px solid var(--line);padding:72px 56px 64px;margin-bottom:28px;isolation:isolate;
+  background:linear-gradient(90deg,rgba(5,11,24,.95) 0%,rgba(5,11,24,.72) 40%,rgba(5,11,24,.1) 75%),
+    url("/app/static/network.svg") right center / auto 100% no-repeat,
+    radial-gradient(600px circle at 80% 40%,rgba(10,111,214,.35),transparent 65%),var(--surface)}
+.hero::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(rgba(91,194,245,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(91,194,245,.05) 1px,transparent 1px);
+  background-size:44px 44px;mask-image:linear-gradient(90deg,transparent,#000 60%);-webkit-mask-image:linear-gradient(90deg,transparent,#000 60%)}
+.hero-by{height:1.2rem}
+.hero-h1{font-family:var(--f-display);font-weight:900;font-stretch:118%;font-size:clamp(3rem,7vw,5.4rem);line-height:1;letter-spacing:-.02em;margin:14px 0 18px}
+.hero-lead{font-size:1.45rem;font-weight:700;color:var(--ink);margin:0 0 10px}
+.hero-sub{color:var(--ink-2);font-size:1rem;max-width:520px;margin:0 0 8px}
+.hero-stats{display:flex;gap:28px;margin:22px 0 6px;flex-wrap:wrap}
+.hero-stats b{display:block;font-family:var(--f-display);font-size:1.9rem;font-weight:800;color:var(--ink);line-height:1.1}
+.hero-stats span{font-size:.78rem;color:var(--muted)}
+.hero-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.hero-btns .btn{border-radius:999px;padding:10px 22px;font-weight:700}
+.hero-btns .btn.ghost{border-color:rgba(255,255,255,.22)}
+
+/* ---------- 급상승 키워드 띠 ---------- */
+.ticker{display:flex;align-items:center;gap:14px;margin:6px 0 26px;padding:10px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface);overflow:hidden}
+.ticker-h{flex:none;font-family:var(--f-mono);font-size:.72rem;letter-spacing:.08em;color:var(--accent-2);white-space:nowrap}
+.ticker-track{overflow:hidden;flex:1;min-width:0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.ticker-run{display:flex;gap:26px;width:max-content;animation:ticker 38s linear infinite}
+.ticker:hover .ticker-run{animation-play-state:paused}
+.ticker-run a{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:.86rem;color:var(--ink-2);text-decoration:none}
+.ticker-run a:hover{color:var(--ink)}
+.ticker-run i{font-style:normal;font-size:.6rem;color:var(--accent-2)}.ticker-run i.up{color:#fab219;font-size:.7rem}
+.ticker-run b{font-family:var(--f-mono);color:var(--ink);font-weight:600}
+.ticker-run em{font-style:normal;font-family:var(--f-mono);font-size:.72rem;color:#fab219}
+@keyframes ticker{to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.ticker-run{animation:none;flex-wrap:wrap;width:auto}}
+
+/* ---------- 처음이라면 · For you ---------- */
+.start{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px;margin:0 0 30px}
+.start a{display:flex;flex-direction:column;gap:6px;padding:18px;border-radius:16px;border:1px solid var(--line);background:var(--surface);text-decoration:none;transition:transform .2s,border-color .2s;min-width:0}
+.start a:hover{transform:translateY(-3px);border-color:var(--accent)}
+.start .n{font-family:var(--f-mono);font-size:.72rem;color:var(--accent-2)}
+.start b{color:var(--ink);font-size:1.02rem}.start span{color:var(--ink-2);font-size:.84rem;line-height:1.55}
+.start em{font-style:normal;font-size:.78rem;color:#fab219;margin-top:auto}
+.start.foryou{grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));margin-bottom:22px}
+.start.foryou a{padding:14px 16px}
+
+/* ---------- 이번 주 흐름 ---------- */
+.week{border-top:1px solid var(--line);padding:44px 0 24px;display:grid;grid-template-columns:1.7fr 1fr;gap:32px;align-items:start}
+@media (max-width:900px){.week{grid-template-columns:1fr;gap:20px;padding-top:30px}}
+.week-title{font-size:1.32rem;font-weight:700;line-height:1.5;margin:8px 0 14px;color:var(--ink)}
+.week-title span{color:var(--accent-2)}
+.week-body{color:var(--ink-2);line-height:1.85;font-size:.97rem;margin:0}
+.week-body strong{color:var(--ink)}
+strong.hl{color:var(--ink);font-weight:800;background:linear-gradient(transparent 58%,rgba(46,155,234,.38) 58%);padding:0 2px}
+.ednote{margin:16px 0 0;border-left:3px solid var(--accent-2);background:rgba(10,111,214,.10);border-radius:0 12px 12px 0;padding:12px 16px;color:var(--ink);line-height:1.75;font-size:.95rem}
+.ednote i{display:block;font:600 .7rem var(--f-mono);letter-spacing:.15em;color:var(--accent-2);font-style:normal;margin-bottom:4px}
+.flow{border:1px solid var(--line);border-radius:16px;padding:20px 22px;background:var(--surface)}
+.flow-h{font-family:var(--f-mono);font-size:.74rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.flow ol{list-style:none;margin:12px 0 0;padding:0;position:relative}
+.flow ol::before{content:"";position:absolute;left:5px;top:8px;bottom:8px;width:1px;background:var(--line)}
+.flow li{position:relative;padding:7px 0 7px 22px;font-size:.9rem;color:var(--ink-2)}
+.flow li::before{content:"";position:absolute;left:0;top:14px;width:11px;height:11px;border-radius:50%;background:var(--bg);border:2px solid var(--line)}
+.flow li.now{color:var(--ink);font-weight:600}
+.flow li.now::before{border-color:var(--accent-2);background:var(--accent-deep);box-shadow:0 0 0 4px rgba(46,155,234,.18)}
+.flow li b{display:block;font-family:var(--f-mono);font-size:.72rem;font-weight:500;color:var(--muted);margin-bottom:1px}
+
+/* ---------- 리더가 알아야 할 3가지 ---------- */
+.l3{margin-top:30px}
+.l3-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:14px;margin-top:12px}
+.l3-card{position:relative;border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:18px 18px 16px;text-decoration:none!important;color:inherit!important;display:flex;flex-direction:column;gap:8px;transition:transform .2s,border-color .2s;min-width:0}
+.l3-card:hover{transform:translateY(-2px);border-color:var(--accent-2)}
+.l3-n{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(135deg,#0A6FD6,#2E9BEA)}
+.l3-card b.t{font-size:1.02rem;line-height:1.45;color:var(--ink)}
+.l3-card .src{font-size:.78rem;color:var(--muted)}
+
+/* ---------- 카테고리 내비 ---------- */
+.cat-nav{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 20px}
+.cat-nav a{display:inline-flex;align-items:center;gap:10px;padding:8px 14px;border:1px solid var(--line);border-radius:999px;text-decoration:none;color:var(--ink-2);font-size:.88rem;background:var(--surface)}
+.cat-nav a:hover{border-color:var(--accent)}
+.cat-nav b span{color:var(--accent-2)}
+.cat-nav i{font-style:normal;font-family:var(--f-mono);font-size:.78rem;color:var(--muted)}
+
+/* ---------- 소스 ---------- */
+.sources{border-top:1px solid var(--line);margin-top:44px;padding-top:44px}
+.src-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:0 16px;align-items:start}
+.src-grid .expander{background:var(--surface);border-radius:14px}
+.src-list{margin:0;padding-left:18px;display:grid;gap:4px;font-size:.9rem}
+.src-list a{color:var(--ink-2);text-decoration:none}.src-list a:hover{color:var(--accent-2)}
+
+/* ---------- 뉴스레터 CTA ---------- */
+.cta{margin-top:48px;border-radius:22px;padding:44px 48px;border:1px solid rgba(46,155,234,.35);display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;
+  background:radial-gradient(500px circle at 100% 0%,rgba(91,194,245,.18),transparent 60%),linear-gradient(120deg,#0A2A5A 0%,#0A4A9A 60%,#0A6FD6 100%)}
+.cta .sec-p{color:#D3E6FA}
+.cta-btn{background:#fff;color:#0A3E80;border:none;border-radius:999px;padding:10px 22px;font-weight:700}
+.cta-btn:hover{background:#E6F1FF;border-color:transparent}
+
+/* ---------- 소개: 만드는 과정 흐름선 ---------- */
+.flowline{list-style:none;counter-reset:f;padding:0;margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:12px}
+.flowline li{counter-increment:f;position:relative;padding:16px 16px 16px 52px;border-radius:14px;border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:4px}
+.flowline li::before{content:counter(f);position:absolute;left:14px;top:14px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-mono);font-size:.8rem;color:#fff;background:linear-gradient(135deg,#0A6FD6,#2E9BEA)}
+.flowline b{color:var(--ink);font-size:.95rem}.flowline span{color:var(--ink-2);font-size:.84rem;line-height:1.6}
+
+/* ---------- 공용 배치 ---------- */
+.cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:14px}
+.cols2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:14px}
+.two-col{display:grid;grid-template-columns:1.6fr 1fr;gap:32px;align-items:start}
+@media (max-width:900px){.two-col{grid-template-columns:1fr;gap:20px}}
+.seg{display:inline-flex;gap:2px;border:1px solid var(--line);border-radius:12px;padding:3px;background:var(--surface);flex-wrap:wrap;max-width:100%}
+.seg button{all:unset;cursor:pointer;padding:7px 14px;border-radius:9px;font-size:.88rem;color:var(--ink-2);white-space:nowrap}
+.seg button.on{background:rgba(10,111,214,.25);color:var(--ink);font-weight:600}
+.seg button:focus-visible{outline:2px solid var(--accent-2)}
+.sub-h{font-size:1.25rem;font-weight:700;margin:26px 0 10px}
+
+/* ---------- 반응형 ---------- */
+@media (max-width:1024px){.hero{padding:60px 36px 52px}.week-title{font-size:1.18rem}}
+@media (max-width:760px){
+  .hero{padding:40px 20px 34px;border-radius:18px}
+  .hero-lead{font-size:1.15rem}.hero-sub{font-size:.92rem}
+  .hero-stats{gap:18px}.hero-stats b{font-size:1.45rem}
+  .hero-btns .btn{width:100%}
+  .cat-nav{gap:8px}.cat-nav a{padding:6px 11px;font-size:.82rem}
+  .cta{padding:28px 20px;border-radius:18px}
+  .cta-btn{width:100%}
+}

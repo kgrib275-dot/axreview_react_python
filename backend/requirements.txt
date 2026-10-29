@@ -1,0 +1,14 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17
+python-dotenv==1.2.4
+pandas>=2.2,<3.1  # 사내 앱 제어 정책상 3.1 DLL이 차단됨
+httpx==0.28.1
+feedparser==6.0.14
+RapidFuzz==3.14.6
+PyYAML==6.0.3
+google-genai==2.30.0
+playwright==1.63.0
+databricks-sql-connector==4.6.0  # Databricks 적재 (Trade_IQ와 같은 버전)
+thrift==0.24.0
+numpy>=2,<3  # 지식 지도·관련 노트 (pipeline/knowledge.py)

@@ -1,0 +1,31 @@
+# config/keywords.yaml — 초기 키워드 시드 (최초 1회만 DB로 들어가고, 이후엔
+# 관리 > 수집 설정 > 키워드에서 편집한다). include 키워드 중 하나라도 걸려야 후보가
+# 되고, exclude 키워드가 걸리면 버린다. category는 AX Review의 3개 분류와 같다.
+
+# ── AX Strategy ──────────────────────────────────────────────
+- {keyword: "AI transformation", aliases: ["AI 전환", "AX", "디지털 전환", "digital transformation"], mode: include, weight: 2.0, category: "AX Strategy"}
+- {keyword: "enterprise AI", aliases: ["기업 AI", "기업용 AI", "AI adoption", "AI 도입"], mode: include, weight: 2.0, category: "AX Strategy"}
+- {keyword: "AI strategy", aliases: ["AI 전략", "AI roadmap", "AI 로드맵"], mode: include, weight: 1.5, category: "AX Strategy"}
+- {keyword: "AI governance", aliases: ["AI 거버넌스", "responsible AI", "AI 규제", "AI regulation"], mode: include, weight: 1.5, category: "AX Strategy"}
+- {keyword: "ROI", aliases: ["productivity", "생산성", "비용 절감", "cost saving"], mode: include, weight: 1.0, category: "AX Strategy"}
+- {keyword: "workforce", aliases: ["layoff", "감원", "reskilling", "리스킬링", "인력"], mode: include, weight: 1.0, category: "AX Strategy"}
+
+# ── AX Implementation ───────────────────────────────────────
+- {keyword: "AI agent", aliases: ["agentic", "에이전트", "AI 에이전트", "multi-agent"], mode: include, weight: 2.0, category: "AX Implementation"}
+- {keyword: "생성형 AI", aliases: ["generative AI", "genAI", "LLM", "copilot", "코파일럿"], mode: include, weight: 1.5, category: "AX Implementation"}
+- {keyword: "제조 AI", aliases: ["smart factory", "스마트팩토리", "manufacturing AI", "predictive maintenance", "예지보전"], mode: include, weight: 2.0, category: "AX Implementation"}
+- {keyword: "컨택센터", aliases: ["contact center", "call center", "콜센터", "customer service AI", "고객센터"], mode: include, weight: 2.0, category: "AX Implementation"}
+- {keyword: "automation", aliases: ["자동화", "RPA", "workflow"], mode: include, weight: 1.0, category: "AX Implementation"}
+- {keyword: "use case", aliases: ["사례", "pilot", "파일럿", "deployment", "도입 사례"], mode: include, weight: 1.0, category: "AX Implementation"}
+
+# ── AX Enablement ───────────────────────────────────────────
+- {keyword: "data platform", aliases: ["데이터 플랫폼", "data foundation", "데이터 기반", "lakehouse"], mode: include, weight: 1.5, category: "AX Enablement"}
+- {keyword: "ontology", aliases: ["온톨로지", "knowledge graph", "지식 그래프", "semantic layer", "시맨틱"], mode: include, weight: 2.0, category: "AX Enablement"}
+- {keyword: "RAG", aliases: ["retrieval augmented", "검색증강", "vector database"], mode: include, weight: 1.5, category: "AX Enablement"}
+- {keyword: "MCP", aliases: ["model context protocol"], mode: include, weight: 1.5, category: "AX Enablement"}
+- {keyword: "AI security", aliases: ["AI 보안", "agent identity", "prompt injection"], mode: include, weight: 1.5, category: "AX Enablement"}
+- {keyword: "AI literacy", aliases: ["AI fluency", "AI 교육", "AI 역량"], mode: include, weight: 1.0, category: "AX Enablement"}
+
+# ── 제외 ─────────────────────────────────────────────────────
+- {keyword: "crypto", aliases: ["bitcoin", "비트코인", "가상화폐", "NFT"], mode: exclude, weight: 1.0, category: ""}
+- {keyword: "주가", aliases: ["stock price", "특징주", "증시"], mode: exclude, weight: 1.0, category: ""}
