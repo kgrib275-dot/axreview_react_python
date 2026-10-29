@@ -9,8 +9,10 @@ import NoteCard, { NoteCardData } from "../components/NoteCard";
 import { SectionHead, useLoad } from "../components/ui";
 import "./Home.css";
 import TryIt from "./TryIt";
+import { CATEGORIES, CountUp, useShareVisit } from "./shared";
 
-export const CATEGORIES = ["AX Strategy", "AX Implementation", "AX Enablement"];
+export { CATEGORIES, CountUp, useShareVisit };  // 예전 경로로 가져오는 곳을 위해
+
 
 type Issue = { id?: number; week: string; range: string; headline_em: string; headline: string; body_html: string; editor_note_html?: string; pdf_url?: string };
 type Home = {
@@ -25,44 +27,8 @@ type Home = {
   sources: Record<string, { name: string; url: string }[]>;
 };
 
-/** 숫자 카운트업 — 화면에 들어오면 0에서 목표까지 1.1초 동안 오른다 (app/fx.py ⑤와 같은 곡선). */
-export function CountUp({ to }: { to: number }) {
-  const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let raf = 0;
-    const run = () => {
-      if (reduce) { el.textContent = to.toLocaleString("ko-KR"); return; }
-      const t0 = performance.now(), dur = 1100;
-      const step = (t: number) => {
-        const p = Math.min(1, (t - t0) / dur);
-        el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))).toLocaleString("ko-KR");
-        if (p < 1) raf = requestAnimationFrame(step);
-      };
-      raf = requestAnimationFrame(step);
-    };
-    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { run(); io.disconnect(); } }), { threshold: 0.12 });
-    io.observe(el);
-    return () => { io.disconnect(); cancelAnimationFrame(raf); };
-  }, [to]);
-  return <b ref={ref} data-to={to}>{to.toLocaleString("ko-KR")}</b>;
-}
 
 /** 공유 링크(?s=1)로 들어온 방문을 세션당 한 번 기록한다 (app/play_ui.track_share_visit). */
-export function useShareVisit(content: string) {
-  const [params] = useSearchParams();
-  useEffect(() => {
-    if (params.get("s") !== "1") return;
-    const key = `_sv_${content}`;
-    try {
-      if (sessionStorage.getItem(key)) return;
-      sessionStorage.setItem(key, "1");
-    } catch { /* 저장소가 막혀도 기록은 한다 */ }
-    track("share_visit", content);
-  }, [params, content]);
-}
 
 /** 소스 목록 — 그룹별 펼침 상자 (홈 '어디서 찾아 읽나'). */
 export function SourceGroups({ sources }: { sources: Record<string, { name: string; url: string }[]> }) {
@@ -152,8 +118,27 @@ export default function HomePage() {
   const [total, setTotal] = useState<number | null>(null);
   useShareVisit("home");
 
-  if (error) return <div className="alert err">{error}</div>;
-  if (!data) return <div className="page-loading">불러오는 중…</div>;
+  // 히어로(제목·버튼)는 API 를 기다리지 않고 바로 그린다 — 예전엔 /api/home 응답 전까지 '불러오는 중'만 보여
+  // 휴대폰 첫 화면(LCP)이 6초를 넘었다. 숫자만 응답 뒤에 채운다.
+  const hero = (c: { notes: number; articles_week: number; sources: number } | null) => (
+    <section className="hero">
+      <div className="hero-by" aria-hidden="true" />
+      <h1 className="hero-h1"><span className="grad">AX Review</span></h1>
+      <p className="hero-lead">기업의 AX를 위한 필수 지식</p>
+      <p className="hero-sub">경영진과 AX 실무자에게 필요한 자료를 찾고, 정리하고, 쌓아 둡니다.</p>
+      <div className="hero-stats">
+        <div>{c ? <CountUp to={c.notes} /> : <b>–</b>}<span>쌓인 노트</span></div>
+        <div>{c ? <CountUp to={c.articles_week} /> : <b>–</b>}<span>최근 7일 검토 기사</span></div>
+        <div>{c ? <CountUp to={c.sources} /> : <b>–</b>}<span>수집 소스</span></div>
+      </div>
+      <div className="hero-btns">
+        <button className="btn primary" onClick={() => openSubscribe("home_hero")}>이메일 리스트 구독하기 →</button>
+        <button className="btn ghost" onClick={openContact}>AX 담당자에게 문의하기</button>
+      </div>
+    </section>
+  );
+  if (error) return <>{hero(null)}<div className="alert err">{error}</div></>;
+  if (!data) return <>{hero(null)}<div className="page-loading" style={{ minHeight: 600 }}>불러오는 중…</div></>;
 
   const issue = data.issue || { week: "", range: "", headline_em: "", headline: "첫 주간 흐름을 준비 중입니다", body_html: "" };
   const counts = data.counts || { notes: 0, articles_week: 0, sources: 0 };
@@ -164,21 +149,7 @@ export default function HomePage() {
   return (
     <>
       {/* ---------- 히어로 ---------- */}
-      <section className="hero">
-        <div className="hero-by" aria-hidden="true" />
-        <h1 className="hero-h1"><span className="grad">AX Review</span></h1>
-        <p className="hero-lead">기업의 AX를 위한 필수 지식</p>
-        <p className="hero-sub">경영진과 AX 실무자에게 필요한 자료를 찾고, 정리하고, 쌓아 둡니다.</p>
-        <div className="hero-stats">
-          <div><CountUp to={counts.notes} /><span>쌓인 노트</span></div>
-          <div><CountUp to={counts.articles_week} /><span>최근 7일 검토 기사</span></div>
-          <div><CountUp to={nSources} /><span>수집 소스</span></div>
-        </div>
-        <div className="hero-btns">
-          <button className="btn primary" onClick={() => openSubscribe("home_hero")}>이메일 리스트 구독하기 →</button>
-          <button className="btn ghost" onClick={openContact}>AX 담당자에게 문의하기</button>
-        </div>
-      </section>
+      {hero({ notes: counts.notes, articles_week: counts.articles_week, sources: nSources })}
 
       <Ticker t={data.ticker} />
 

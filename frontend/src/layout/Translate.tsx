@@ -30,7 +30,8 @@ function setCookie(v: string) {
 /** 앱 시작 때 한 번 — 다른 언어를 골라 둔 방문자면 위젯을 불러온다. */
 export function initTranslate() {
   const lang = current();
-  if (lang === "ko" || document.getElementById("gt-el")) return;
+  // 관리 화면은 번역하지 않는다 — 외부 스크립트가 관리자 권한 화면에서 돌거나 구독자 이메일 등이 번역으로 나가지 않게
+  if (lang === "ko" || location.pathname.startsWith("/admin") || document.getElementById("gt-el")) return;
   const host = document.createElement("div");
   host.id = "gt-el"; host.style.display = "none";
   document.body.appendChild(host);

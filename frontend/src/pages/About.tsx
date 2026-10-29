@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { get } from "../api";
 import { useDialogs } from "../components/Dialogs";
 import { useLoad } from "../components/ui";
-import { CountUp } from "./Home";
+import { CountUp } from "./shared";
 import "./Home.css";
 
 type About = {

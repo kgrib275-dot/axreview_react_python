@@ -90,7 +90,7 @@ def try_it(c: Caller = CallerDep) -> dict:
         q0 = {"day": d_iso, "q": q["q"], "sub": q.get("sub", ""), "options": q["options"], "left": len(quiz) - 1}
         done = [r for r in engage.mine("quiz", c.visitor, f"{d_iso}:0") if r["item"] == f"{d_iso}:0"]
         if done:  # 이미 풀었으면 결과까지 (오늘의 AX 에서 풀었어도 같다)
-            q0["mine"] = today_api._mine(q, done[0]["value"], engage.quiz_stats(d_iso), 0)
+            q0["mine"] = today_api._mine(q, done[0]["value"], today_api.quiz_stats(d_iso), 0)
     mine = _mine(c)
     tests = [{"url": url, "kind": kind, "emoji": e, "name": name, "line": line, "time": tm,
               "count": shared["counts"][kind] if shared["counts"][kind] >= MIN_SHOW else None, "mine": mine.get(kind)}

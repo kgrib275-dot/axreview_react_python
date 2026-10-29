@@ -35,7 +35,10 @@ def _cached(key: tuple, fn):
             return hit[1]
     val = fn()
     with _lock:
-        _cache[key] = (time.time(), val)
+        now = time.time()
+        for k in [k for k, (t, _) in _cache.items() if now - t >= _TTL]:  # 만료된 집계는 버린다 (메모리가 계속 늘지 않게)
+            _cache.pop(k, None)
+        _cache[key] = (now, val)
     return val
 
 
@@ -90,8 +93,9 @@ def _quiz_tab(df: pd.DataFrame) -> dict:
     per["rate"] = (per["rate"] * 100).round(1)
     per = per.sort_values("item", ascending=False)
     pivot = q.pivot_table(index="age", columns="gender", values="correct", aggfunc="mean").mul(100).round(1)
-    streaks = Counter(_cached(("streaks", tuple(sorted(q["visitor"].unique()))),
-                              lambda: engage.streaks(tuple(sorted(q["visitor"].unique())))).values())
+    visitors = tuple(sorted(q["visitor"].unique()))
+    # 캐시 키에 방문자 수천 명 목록을 통째로 넣지 않는다 (키마다 수백 KB) — 개수와 해시로
+    streaks = Counter(_cached(("streaks", len(visitors), hash(visitors)), lambda: engage.streaks(visitors)).values())
     return {"empty": False,
             "per_question": [{"item": r["item"], "responses": int(r["responses"]), "rate": float(r["rate"])} for r in per.to_dict("records")],
             "age_gender": _table(pivot),

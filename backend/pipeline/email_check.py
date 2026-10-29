@@ -16,6 +16,7 @@ _TLD_FIX = {"con": "com", "cmo": "com", "ocm": "com", "comm": "com", "co": "com"
 
 _cache: dict[str, tuple[float, bool]] = {}
 _lock = threading.Lock()
+_DNS_SLOTS = threading.BoundedSemaphore(4)  # 처음 보는 도메인 DNS 확인은 동시에 4건까지 — 나머지는 확인 없이 통과(확인 메일이 최종 확인)
 _TTL = 86400
 
 
@@ -38,7 +39,7 @@ def _resolvable(domain: str) -> bool:
     import dns.resolver
 
     r = dns.resolver.Resolver()
-    r.lifetime = 3.0
+    r.lifetime = 2.0
     try:
         r.resolve(domain, "MX")
         return True
@@ -68,7 +69,12 @@ def domain_ok(domain: str) -> bool:
     hit = _cache.get(d)
     if hit and time.monotonic() - hit[0] < _TTL:
         return hit[1]
-    ok = _resolvable(d)
+    if not _DNS_SLOTS.acquire(timeout=0.5):
+        return True  # 확인이 밀려 있으면 막지 않는다 (서버 작업 슬롯을 DNS 대기로 묶지 않게)
+    try:
+        ok = _resolvable(d)
+    finally:
+        _DNS_SLOTS.release()
     with _lock:
         if len(_cache) > 5000:
             _cache.clear()

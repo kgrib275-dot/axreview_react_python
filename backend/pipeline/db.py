@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS access_logs (
 CREATE INDEX IF NOT EXISTS ix_acc_action ON access_logs(action, created_at);
 CREATE INDEX IF NOT EXISTS ix_acc_ip ON access_logs(ip, action, created_at);
 CREATE INDEX IF NOT EXISTS ix_acc_created ON access_logs(created_at);
+CREATE INDEX IF NOT EXISTS ix_art_collected ON articles(collected_at);
 """
 
 # 이전 버전 DB(샘플 사이트만 있던 시절)에 없던 컬럼 — 있으면 건너뛴다.
@@ -187,8 +188,24 @@ def init_db() -> None:
 
 # ───────────────────────── 노트 ─────────────────────────
 
+_col_cache: dict[tuple[str, str], str] = {}
+
+
+def _cols(table: str) -> str:
+    """embedding 을 뺀 열 목록 — 목록 조회마다 임베딩(행당 수 KB)을 읽고 버리지 않게 (기사 10일치 165ms → 31ms)."""
+    key = (str(DB_PATH), table)
+    if key not in _col_cache:
+        conn = connect()
+        try:
+            cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})") if r["name"] != "embedding"]
+        finally:
+            conn.close()
+        _col_cache[key] = ", ".join(cols) if cols else "*"
+    return _col_cache[key]
+
+
 def notes(status: str = "published") -> list[dict]:
-    return _rows("SELECT * FROM notes WHERE status = ? ORDER BY published DESC, id DESC", (status,))
+    return _rows(f"SELECT {_cols('notes')} FROM notes WHERE status = ? ORDER BY published DESC, id DESC", (status,))
 
 
 def note(note_id: int) -> dict | None:
@@ -473,8 +490,13 @@ def upsert_articles(items: list[Item]) -> None:
 def articles(since_days: int = 30) -> list[dict]:
     since = (datetime.now(timezone.utc) - timedelta(days=since_days)).isoformat()
     return _rows(
-        "SELECT * FROM articles WHERE collected_at >= ? ORDER BY collected_at DESC, llm_score DESC", (since,)
+        f"SELECT {_cols('articles')} FROM articles WHERE collected_at >= ? ORDER BY collected_at DESC, llm_score DESC", (since,)
     )
+
+
+def article_count_since(since_days: int) -> int:
+    since = (datetime.now(timezone.utc) - timedelta(days=since_days)).isoformat()
+    return _rows("SELECT COUNT(*) n FROM articles WHERE collected_at >= ?", (since,))[0]["n"]
 
 
 def article(url_hash: str) -> dict | None:

@@ -1,6 +1,6 @@
 // 오늘의 AX (/today) — 매일 바뀌는 3문항 퀴즈 + 내일 키워드 예측 투표 + 연속 참여(스트릭) + 참여 지도.
 // 퀴즈·투표에 답하면 POST 응답으로 그 부분만 바꾼다 (참여 지도 iframe 은 다시 그리지 않는다 — st.fragment 와 같은 효과).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ApiError, get, post } from "../api";
 import { SubscribeCTA } from "../components/Dialogs";
@@ -15,7 +15,7 @@ type Poll = { day: string; question: string; options: string[]; mine?: string | 
 type Yesterday = { question: string; winner: string; actual?: Record<string, number>; crowd?: string; mine?: string | null; band?: boolean } | null;
 type TodayData = {
   day: string; term?: { track: string; track_label: string; term: string; define: string; hint: string } | null;
-  quiz: Quiz[]; score: number; done: boolean; streak: number; poll?: Poll | null; yesterday?: Yesterday; map_html?: string;
+  quiz: Quiz[]; score: number; done: boolean; streak: number; poll?: Poll | null; yesterday?: Yesterday; map_url?: string;
 };
 
 /** 다음 문제(한국 시간 자정)까지 남은 시간. */
@@ -82,7 +82,8 @@ export default function Today() {
         <div><b>⏳ {left.h}시간 {left.m}분</b><span>다음 문제까지</span></div>
       </div>
 
-      {loading && !data && <div className="page-loading">불러오는 중…</div>}
+      {/* 퀴즈 자리를 미리 잡아 둔다 — 내용이 오면서 아래 지도 구역이 밀려 화면이 흔들리지 않게 (CLS 0.35) */}
+      {loading && !data && <div className="page-loading" style={{ minHeight: 900 }}>불러오는 중…</div>}
       {error && <Alert kind="err">{error}</Alert>}
 
       {data?.term && (
@@ -156,13 +157,33 @@ export default function Today() {
       <div className="eyebrow">Participation Map</div>
       <h3 className="sec-h" style={{ fontSize: "1.35rem" }}>어디서 <span className="grad">참여하고 있을까?</span></h3>
       <p className="caption" style={{ margin: "-6px 0 8px" }}>참여 통계에 보태 주신 분들의 국가·지역·연령대 기준입니다. 나라를 누르면 성별·연령대·유형 분포가 나옵니다.</p>
-      {data?.map_html ? <MapFrame html={data.map_html} /> : <p className="caption">참여 지도를 불러오는 중…</p>}
-      {data?.map_html && <JumpToHash />}
+      <LazyMap />
     </div>
   );
 }
 
-/** 지도 iframe 은 html 문자열이 같으면 다시 그리지 않는다 (퀴즈 답을 바꿔도 수백 KB 를 다시 보내지 않게). */
+/** 참여 지도 — 화면에 가까워지면 /api/map/html 을 따로 불러온다 (오늘의 AX 응답에 싣지 않음, 브라우저 캐시 2분). */
+function LazyMap() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [html, setHtml] = useState<string | null>(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const load = () => fetch("/api/map/html", { credentials: "same-origin" }).then((r) => (r.ok ? r.text() : Promise.reject())).then(setHtml).catch(() => setErr(true));
+    if (!("IntersectionObserver" in window) || window.location.hash === "#map") { load(); return; }
+    const io = new IntersectionObserver((es) => { if (es[0].isIntersecting) { io.disconnect(); load(); } }, { rootMargin: "600px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{ minHeight: 560 }}>
+      {html ? <><MapFrame html={html} /><JumpToHash /></> : <p className="caption">{err ? "참여 지도를 불러오지 못했습니다." : "참여 지도를 불러오는 중…"}</p>}
+    </div>
+  );
+}
+
+/** 지도 iframe 은 html 문자열이 같으면 다시 그리지 않는다. */
 function MapFrame({ html }: { html: string }) {
   return useMemo(() => <DocFrame html={html} title="참여 지도" fallback={560} />, [html]);
 }

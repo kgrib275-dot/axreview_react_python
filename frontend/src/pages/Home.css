@@ -23,8 +23,12 @@
 /* ---------- 급상승 키워드 띠 ---------- */
 .ticker{display:flex;align-items:center;gap:14px;margin:6px 0 26px;padding:10px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface);overflow:hidden}
 .ticker-h{flex:none;font-family:var(--f-mono);font-size:.72rem;letter-spacing:.08em;color:var(--accent-2);white-space:nowrap}
-.ticker-track{overflow:hidden;flex:1;min-width:0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
-.ticker-run{display:flex;gap:26px;width:max-content;animation:ticker 38s linear infinite}
+/* 가장자리 흐림: mask-image 대신 위에 덧씌운 그라데이션 — mask 가 있으면 움직이는 띠를 매 프레임 다시 그려 휴대폰 CPU 를 30% 넘게 썼다 */
+.ticker-track{overflow:hidden;flex:1;min-width:0;position:relative}
+.ticker-track::before,.ticker-track::after{content:"";position:absolute;top:0;bottom:0;width:28px;z-index:1;pointer-events:none}
+.ticker-track::before{left:0;background:linear-gradient(90deg,var(--surface),transparent)}
+.ticker-track::after{right:0;background:linear-gradient(270deg,var(--surface),transparent)}
+.ticker-run{display:flex;gap:26px;width:max-content;animation:ticker 38s linear infinite;will-change:transform}  /* GPU 가 따로 움직인다 */
 .ticker:hover .ticker-run{animation-play-state:paused}
 .ticker-run a{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:.86rem;color:var(--ink-2);text-decoration:none}
 .ticker-run a:hover{color:var(--ink)}

@@ -180,9 +180,9 @@ def weekly_flows(limit: int = 5) -> dict:
     Returns:
         flows(week/range/headline/body 목록, 최신순).
     """
-    items = db.issues("published")[-_n(limit, 5, 1, 20):][::-1]
+    items = db.issues("published")[-_n(limit, 5, 1, 8):][::-1]
     return {"flows": [{"week": i["week"], "range": i["range"],
-                       "headline": f"{i['headline_em']} {i['headline']}".strip(), "body": i["body"]} for i in items]}
+                       "headline": f"{i['headline_em']} {i['headline']}".strip(), "body": (i["body"] or "")[:1500]} for i in items]}
 
 
 TOOLS = [search_notes, search_articles, weekly_flows]

@@ -1,10 +1,11 @@
 // AI 활용 습관 진단 (/habit) — 10문항 × 4단계, 한 번에 한 문항. 5개 영역 점수·단계·다음에 해 볼 3가지 (backend app/ax_tests.py).
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError, get, post } from "../api";
 import { SubscribeCTA } from "../components/Dialogs";
 import NoteCard, { NoteCardData } from "../components/NoteCard";
 import ProfileForm, { ShareReveal, useShareVisit } from "../components/ProfileForm";
 import { Alert, useLoad } from "../components/ui";
+import { useMe } from "../me";
 import "./MoreTests.css";
 
 type HabitData = { scale: string[]; dims: { key: string; name: string; desc: string }[]; questions: { dim: string; q: string }[] };
@@ -18,9 +19,21 @@ type HabitResult = {
 export default function Habit() {
   useShareVisit("habit");
   const { data, error, loading } = useLoad(() => get<HabitData>("habit"), []);
-  const [answers, setAnswers] = useState<number[]>([]);
+  // 답은 방문자 상태(hab_answers)에 저장 — 다른 페이지에 다녀와도 이어서 풀고, 다 풀었으면 결과를 다시 보여 준다
+  const { state, setState } = useMe();
+  const answers = useMemo(() => (Array.isArray(state.hab_answers) ? (state.hab_answers as number[]) : []), [state.hab_answers]);
   const [res, setRes] = useState<HabitResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const total0 = data?.questions.length ?? 0;
+  const key = answers.join(",");
+  useEffect(() => {
+    if (!total0 || answers.length !== total0) { setRes(null); return; }
+    let alive = true;
+    setErr(null);
+    post<HabitResult>("habit/result", { answers }).then((r) => alive && setRes(r)).catch((e) => alive && setErr((e as ApiError).message));
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, total0]);
 
   if (loading && !data) return <div className="page-loading">불러오는 중…</div>;
   if (error || !data) return <Alert kind="err">{error || "진단을 불러오지 못했습니다."}</Alert>;
@@ -28,14 +41,8 @@ export default function Habit() {
   const step = answers.length;
   const dimName = (k: string) => data.dims.find((d) => d.key === k)?.name || "";
 
-  const pick = (v: number) => {
-    const next = [...answers, v];
-    setAnswers(next);
-    if (next.length === total) {
-      post<HabitResult>("habit/result", { answers: next }).then(setRes).catch((e) => setErr((e as ApiError).message));
-    }
-  };
-  const retry = () => { setAnswers([]); setRes(null); setErr(null); };
+  const pick = (v: number) => setState({ hab_answers: [...answers.slice(0, total), v].slice(0, total) });
+  const retry = () => { setState({ hab_answers: [] }); setRes(null); setErr(null); };
 
   return (
     <div className="mt-page">
@@ -53,7 +60,7 @@ export default function Habit() {
               {data.scale.map((label, v) => <button key={label} type="button" className="btn mt-opt" onClick={() => pick(v)}>{label}</button>)}
             </div>
           </div>
-          {step > 0 && <button className="btn sm ghost" type="button" style={{ marginTop: 10 }} onClick={() => setAnswers(answers.slice(0, -1))}>← 이전 문항</button>}
+          {step > 0 && <button className="btn sm ghost" type="button" style={{ marginTop: 10 }} onClick={() => setState({ hab_answers: answers.slice(0, -1) })}>← 이전 문항</button>}
         </>
       )}
 

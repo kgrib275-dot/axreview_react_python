@@ -79,15 +79,22 @@ def _saved(strict: bool = False) -> dict:
     return hit[2] if hit else {}
 
 
+_merged: dict = {}
+
+
 def load() -> dict:
-    saved = deepcopy(_saved())  # 부르는 쪽이 목록을 고쳐도 메모리 사본이 바뀌지 않게
-    cfg = deepcopy(DEFAULTS)
-    for key, val in saved.items():
-        if isinstance(val, dict) and isinstance(cfg.get(key), dict):
-            cfg[key].update(val)
-        else:
-            cfg[key] = val
-    return cfg
+    """기본값 + 저장값. 요청마다 3~7번 불려 매번 합치고 깊은 복사하던 것을 파일이 바뀔 때만 합친다.
+    부르는 쪽이 고쳐도 원본이 바뀌지 않게 돌려줄 때는 복사본 (구역 단위 얕은 복사 + 목록 복사)."""
+    saved = _saved()
+    if _merged.get("src") is not saved:
+        cfg = deepcopy(DEFAULTS)
+        for key, val in deepcopy(saved).items():
+            if isinstance(val, dict) and isinstance(cfg.get(key), dict):
+                cfg[key].update(val)
+            else:
+                cfg[key] = val
+        _merged.update(src=saved, cfg=cfg)
+    return deepcopy(_merged["cfg"])
 
 
 def _write(cfg: dict) -> None:

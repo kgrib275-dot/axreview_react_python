@@ -1,6 +1,6 @@
 /* AX Review 테마 — Streamlit 판 app/theme.py 의 색·글꼴·조각을 일반 DOM 용으로 옮김.
    페이지 전용 스타일은 각 페이지 파일 옆 *.css 에 둔다. */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* 글꼴은 index.html 의 <link>(preconnect + 필요한 굵기만)로 불러온다 — CSS @import 는 CSS 를 다 받은 뒤에야 글꼴 CSS 를 찾아 첫 화면을 늦췄다 */
 
 :root{
   --f-display:"Archivo","IBM Plex Sans KR",system-ui,sans-serif;
@@ -260,3 +260,5 @@ font[style]{background:none!important;box-shadow:none!important}
 
 /* iframe 문서 */
 .doc-frame{width:100%;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+/* 내용이 오기 전 짧은 "불러오는 중" 아래로 푸터가 올라왔다가 내려가며 화면이 흔들리지 않게 (CLS 0.14~0.37) */
+main{min-height:100vh}

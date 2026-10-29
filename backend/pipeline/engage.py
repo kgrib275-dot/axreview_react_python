@@ -34,6 +34,8 @@ CREATE INDEX IF NOT EXISTS ix_eng_kind ON engagements(kind, created_at);
 CREATE INDEX IF NOT EXISTS ix_eng_visitor ON engagements(visitor, created_at);
 CREATE INDEX IF NOT EXISTS ix_eng_kind_item ON engagements(kind, item);
 CREATE INDEX IF NOT EXISTS ix_eng_created ON engagements(created_at);
+-- 방문자의 특정 기록 찾기(mine) — (kind, item) 인덱스로는 LIKE 를 못 써 퀴즈 기록 전체(1만 명 13만 행)를 훑었다 (요청당 45ms)
+CREATE INDEX IF NOT EXISTS ix_eng_vk ON engagements(visitor, kind, item);
 CREATE TABLE IF NOT EXISTS profiles (
   visitor TEXT PRIMARY KEY, gender TEXT NOT NULL DEFAULT '', age TEXT NOT NULL DEFAULT '',
   country TEXT NOT NULL DEFAULT '', region TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
@@ -65,6 +67,11 @@ def _conn():
                              "(SELECT MIN(id) FROM engagements WHERE kind IN ('quiz','poll','ref_visit') AND visitor != '' "
                              "GROUP BY kind, visitor, item)")
                 conn.execute(_ONCE_INDEX)
+        # 새 인덱스(ix_eng_vk)는 통계가 없으면 SQLite 가 예전 인덱스를 고를 수 있다 — 처음 한 번 이 표만 다시 분석
+        has_stat = conn.execute("SELECT 1 FROM sqlite_master WHERE name='sqlite_stat1'").fetchone()
+        if not has_stat or not conn.execute("SELECT 1 FROM sqlite_stat1 WHERE idx='ix_eng_vk'").fetchone():
+            conn.execute("ANALYZE engagements")
+            conn.commit()
         _schema_ready.add(str(db.DB_PATH))
     return conn
 
@@ -125,7 +132,7 @@ def check_cookie(cookie: str | None) -> tuple[str | None, bool]:
         return None, False
     if sig:
         return (raw, False) if hmac.compare_digest(sig, _sig(raw)) else (None, False)
-    return (raw, True) if _known(raw) else (None, False)
+    return None, False  # 서명 없는 쿠키는 받지 않는다 — 원값만 알면 남의 방문자로 행세할 수 있다
 
 
 def visitor_id(raw: str | None, ip: str | None) -> str:
@@ -273,9 +280,10 @@ def rows(kind: str | None = None, since_days: int | None = None, include_sample:
 def mine(kind: str, visitor: str, item_prefix: str = "") -> list[dict]:
     conn = _conn()
     try:
+        # LIKE 대신 범위 비교 — ix_eng_vk(visitor, kind, item) 를 끝까지 탄다
         return [dict(r) for r in conn.execute(
-            "SELECT * FROM engagements WHERE kind=? AND visitor=? AND item LIKE ? ORDER BY id",
-            (kind, visitor, item_prefix + "%"))]
+            "SELECT * FROM engagements WHERE visitor=? AND kind=? AND item >= ? AND item < ? ORDER BY id",
+            (visitor, kind, item_prefix, item_prefix + "\U0010ffff"))]
     finally:
         conn.close()
 

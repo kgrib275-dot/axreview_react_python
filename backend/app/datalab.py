@@ -254,8 +254,8 @@ _HTML = _HEAD + r"""
 .srow .s{color:var(--accent-2);font-size:.74rem;white-space:nowrap;max-width:9em;overflow:hidden;text-overflow:ellipsis}
 .srow .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .live{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:.7rem;color:var(--muted);float:right}
-.live i{width:7px;height:7px;border-radius:50%;background:#0ca30c;box-shadow:0 0 0 0 rgba(12,163,12,.6);animation:pulse 1.8s infinite}
-@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(12,163,12,0)}100%{box-shadow:0 0 0 0 rgba(12,163,12,0)}}
+.live i{width:7px;height:7px;border-radius:50%;background:#0ca30c;animation:pulse 1.8s infinite}
+@keyframes pulse{50%{opacity:.35}}  /* 투명도만 바꾼다 — 그림자 애니메이션은 매 프레임 다시 그린다 */
 details.tbl{margin-top:10px;color:var(--muted);font-size:.78rem}
 details.tbl summary{cursor:pointer}
 details.tbl table{width:100%;border-collapse:collapse;margin-top:6px}
@@ -486,6 +486,7 @@ function rebuildGraph() {
   adj = {}; L.forEach(l => { (adj[l.a] ||= new Set()).add(l.b); (adj[l.b] ||= new Set()).add(l.a); });
   particles = L.flatMap(l => Array.from({ length: Math.min(3, Math.ceil(l.w / maxW * 3)) }, () => ({ l, p: Math.random(), sp: .002 + Math.random() * .003 })));
   alpha = Math.max(alpha, .35);
+  if (typeof kick === 'function') kick();
 }
 let hover = null, drag = null, alpha = 1;
 const view = { s: 1, cx: 0, cy: 0 };  // 그래프 전체가 캔버스에 꽉 차게 맞추는 변환 (노드 크기·글자는 그대로)
@@ -547,7 +548,23 @@ function draw() {
   });
   ctx.globalAlpha = 1;
 }
-function loop() { tick(); draw(); requestAnimationFrame(loop); }
+// 자리를 잡은 뒤에는 힘 계산(키워드 수의 제곱)을 멈추고 흐름 입자만 초당 20번 그린다. 화면 밖·숨은 탭이면 멈춘다
+// (예전엔 늘 60fps로 힘 계산까지 돌아 가만히 둬도 CPU 데스크톱 18%·휴대폰 62%).
+let running = false, onScreen = true, lastDraw = 0;
+// 휴대폰·터치 기기: 자리를 잡으면 연결망은 멈춘다(흐름 입자 없이 한 장) — 건드리면 다시 움직인다. 기사 흐름은 초당 30프레임.
+const LITE = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
+const settled = () => !drag && alpha < .03 && N.every(n => Math.abs(n.vx) + Math.abs(n.vy) < .05 && Math.abs(n.tr - n.r) < .2);
+function loop(t = 0) {
+  if (document.hidden || !onScreen) { running = false; return; }
+  const still = settled();
+  if (!still) { tick(); draw(); lastDraw = t; }
+  else if (LITE) { draw(); running = false; return; }
+  else if (t - lastDraw > 100) { draw(); lastDraw = t; }  // 자리 잡은 뒤에는 흐름 입자만 초당 10번
+  requestAnimationFrame(loop);
+}
+function kick() { if (!running) { running = true; requestAnimationFrame(loop); } }
+new IntersectionObserver(es => { onScreen = es[0].isIntersecting; if (onScreen) kick(); }).observe(cv);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { kick(); kickStream(); } });
 function pick(ev) {
   const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
   let best = null, bd = 1e9;
@@ -559,6 +576,7 @@ cv.addEventListener('pointerdown', e => { const p = pick(e); downAt = [e.clientX
 cv.addEventListener('pointermove', e => {
   const p = pick(e);
   if (drag) { drag.x = p.x; drag.y = p.y; alpha = Math.max(alpha, .3); }
+  kick();
   hover = drag ? drag.i : p.n ? p.n.i : null;
   cv.style.cursor = p.n ? 'pointer' : 'grab';
   if (p.n && !drag) showTip(e.clientX, e.clientY, `${fmt(A.count[p.n.i])}건`, `${p.n.id} · 연결 ${(adj[p.n.i] || new Set()).size}`, kwColor(p.n.i));
@@ -571,7 +589,7 @@ cv.addEventListener('pointerup', e => {
   if (!moved) { const p = pick(e); select(p.n ? (p.n.i === S.kw ? null : p.n.i) : null); }
   drag = null; cv.classList.remove('dragging');
 });
-cv.addEventListener('pointerleave', () => { hover = null; hideTip(); });
+cv.addEventListener('pointerleave', () => { hover = null; hideTip(); kick(); });
 
 function renderNetTable() {
   const t = document.getElementById('net-table'); t.replaceChildren(); const h = el('tr');
@@ -660,16 +678,24 @@ function renderStream() {
   rows.forEach(a => s.append(make(a)));
   if (!rows.length) s.append(el('div', 'empty', '이 조건에 맞는 기사가 없습니다'));
   if (!REDUCED && rows.length > 8) rows.forEach(a => { const r = make(a); r.tabIndex = -1; r.setAttribute('aria-hidden', 'true'); s.append(r); });  // 이어 붙여 끊김 없이 돈다
-  sy = 0;
+  sy = 0; streamHalf = 0;
+  if (typeof kickStream === 'function') kickStream();
 }
 const sbox = document.getElementById('stream-box');
 sbox.addEventListener('pointerenter', () => paused = true); sbox.addEventListener('pointerleave', () => paused = false);
 sbox.addEventListener('focusin', () => paused = true); sbox.addEventListener('focusout', () => paused = false);
+// 기사 흐름: 높이는 목록을 새로 그릴 때만 잰다(매 프레임 scrollHeight 를 읽으면 레이아웃을 다시 계산한다), 화면 밖·숨은 탭이면 멈춘다
+let streamHalf = 0, streamOn = true, streamRunning = false, streamTick = false;
 function streamLoop() {
   const s = document.getElementById('stream');
-  if (!paused && !REDUCED && s.children.length > 16) { sy += .35; const half = s.scrollHeight / 2; if (sy >= half) sy -= half; s.style.transform = `translateY(${-sy}px)`; }
+  if (document.hidden || !streamOn || REDUCED || s.children.length <= 16) { streamRunning = false; return; }
+  if (!streamHalf) streamHalf = s.scrollHeight / 2;
+  streamTick = !streamTick;
+  if (!paused && (!LITE || streamTick)) { sy += LITE ? .7 : .35; if (sy >= streamHalf) sy -= streamHalf; s.style.transform = `translateY(${-sy}px)`; }
   requestAnimationFrame(streamLoop);
 }
+function kickStream() { if (!streamRunning) { streamRunning = true; requestAnimationFrame(streamLoop); } }
+new IntersectionObserver(es => { streamOn = es[0].isIntersecting; if (streamOn) kickStream(); }).observe(sbox);
 
 /* ── 갱신 ── */
 function select(i) { S.kw = i; update(); }
@@ -683,10 +709,10 @@ document.getElementById('foot').textContent = `기준 ${D.asof} KST · 키워드
 aggregate(); rebuildGraph(); N.forEach(n => n.r = n.tr);
 renderFilter(); renderPanel(); renderNetTable(); renderFunnel(); renderHeat(); renderStream();
 resize(); renderDaily();
-addEventListener('resize', () => { resize(); renderDaily(); });
+addEventListener('resize', () => { resize(); renderDaily(); streamHalf = 0; kick(); });
 for (let i = 0; i < 220; i++) tick();  // 처음부터 자리 잡힌 모양으로 시작
 fit(true);
-loop(); streamLoop();
+kick(); kickStream();
 </script>
 </body></html>
 """

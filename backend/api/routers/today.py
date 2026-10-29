@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Body, HTTPException
 
-from api.common import cached
+from api.common import cached, cached_set
 from api.deps import Caller, CallerDep
 from app import geo_map, glossary
 from pipeline import db, engage, settings_store
@@ -17,6 +17,15 @@ from pipeline import db, engage, settings_store
 router = APIRouter(tags=["today"])
 
 _DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def quiz_stats(d_iso: str, fresh: bool = False) -> dict:
+    """문항별 참여 수·정답률 — 10초 캐시 (그날 응답 수천 건을 요청마다 집계하지 않게). 방금 답한 사람(fresh)은 새로 센다."""
+    if fresh:
+        val = engage.quiz_stats(d_iso)
+        cached_set(f"today:qstats:{d_iso}", val)
+        return val
+    return _cached(f"qstats:{d_iso}", lambda: engage.quiz_stats(d_iso), 10)
 
 
 def _cached(key: str, fn, ttl: int):
@@ -67,7 +76,7 @@ def today(d: str | None = None, c: Caller = CallerDep) -> dict:
 
     quiz = quiz_of(d_iso)
     done = {r["item"]: r for r in engage.mine("quiz", me, d_iso + ":")}
-    stats = engage.quiz_stats(d_iso) if done else {}
+    stats = quiz_stats(d_iso) if done else {}
     items, score = [], 0
     for i, q in enumerate(quiz):
         key = f"{d_iso}:{i}"
@@ -96,7 +105,7 @@ def today(d: str | None = None, c: Caller = CallerDep) -> dict:
         "poll": _poll_block(d_iso, me), "yesterday": yesterday,
         "share": {"url": f"/s/q?d={d_iso}&score={score}&n={n}", "title": f"오늘의 AX 퀴즈 {score}/{n} — 너도 풀어 봐",
                   "text": f"오늘의 AX 퀴즈 {score}/{n} 정답. 실제 수집 데이터로 매일 새로 나오는 3문제입니다."} if quiz and answered == n else None,
-        "map_html": map_html(),
+        "map_url": "/api/map/html",  # 지도는 따로 불러온다 (퀴즈를 풀 때마다 지도 17KB 를 다시 받지 않게)
     }
 
 
@@ -117,7 +126,7 @@ def answer_quiz(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
         raise HTTPException(status_code=400, detail="이미 답한 문항입니다.")
     if not engage.record("quiz", key, choice, {"correct": int(choice == q["answer"])}, visitor=c.visitor):
         raise HTTPException(status_code=400, detail="이미 답한 문항입니다.")  # 더블클릭·동시 요청 — DB가 두 번째를 막았다
-    return _mine(q, choice, engage.quiz_stats(d_iso), i)
+    return _mine(q, choice, quiz_stats(d_iso, fresh=True), i)
 
 
 @router.post("/today/poll")

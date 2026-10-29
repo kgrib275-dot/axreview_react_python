@@ -8,7 +8,7 @@ import NoteCard, { NoteCardData, useBookmarks } from "../components/NoteCard";
 import ShareBar from "../components/ShareBar";
 import { Alert, Guide, useLoad } from "../components/ui";
 import { useMe } from "../me";
-import { CATEGORIES, useShareVisit } from "./Home";
+import { CATEGORIES, useShareVisit } from "./shared";
 import "./Notes.css";
 
 type ListRes = {

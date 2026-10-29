@@ -15,6 +15,8 @@ import importlib
 import logging
 import os
 import pkgutil
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -28,7 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent  # backend/
 DIST = ROOT.parent / "frontend" / "dist"
 load_dotenv(ROOT / ".env")
 
-from pipeline import db  # noqa: E402  (.env 먼저)
+from pipeline import db, settings_store  # noqa: E402  (.env 먼저)
 
 log = logging.getLogger("axreview.api")
 
@@ -47,6 +49,8 @@ def _log_file() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _log_file()
+    import anyio.to_thread
+    anyio.to_thread.current_default_thread_limiter().total_tokens = 100  # 동시 요청 작업 스레드 (기본 40)
     db.init_db()
     from pipeline.scheduler import start_scheduler_thread
     start_scheduler_thread()
@@ -56,7 +60,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AX Review API", docs_url="/api/docs" if os.environ.get("AXREVIEW_DEBUG") else None,
               redoc_url=None, openapi_url="/api/openapi.json" if os.environ.get("AXREVIEW_DEBUG") else None, lifespan=lifespan)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 # 보안 헤더 — 다른 사이트가 이 화면을 iframe 에 넣어 클릭을 가로채지 못하게(frame-ancestors), 형식 추측 금지 등.
 # 스크립트 출처 제한(CSP script-src)은 데이터 랩·지도 문서(srcdoc)의 인라인 스크립트와 카카오 SDK 때문에 넣지 않았다.
@@ -68,6 +72,27 @@ _SECURITY_HEADERS = {
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
 }
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+MAX_BODY = 64 * 1024            # 공개 API 요청 본문 상한 (관리 API 는 2MB) — 큰 본문으로 DB·백업을 불리지 못하게
+MAX_BODY_ADMIN = 2 * 1024 * 1024
+WRITE_PER_MIN = 240             # IP 하나가 1분에 보낼 수 있는 쓰기 요청 수 (회사 공용 IP 를 고려해 넉넉히)
+_writes: dict[str, list[float]] = {}
+_writes_lock = threading.Lock()
+
+
+def _too_many_writes(ip: str) -> bool:
+    """IP별 최근 1분 쓰기 요청 수 — 쿠키를 지워 가며 퀴즈·투표·기록을 반복해 통계를 왜곡하거나 DB를 불리는 것을 막는다."""
+    now = time.monotonic()
+    with _writes_lock:
+        if len(_writes) > 20000:  # 메모리 상한 — 오래된 IP 정리
+            for k in [k for k, v in _writes.items() if not v or now - v[-1] > 60]:
+                _writes.pop(k, None)
+        q = [t for t in _writes.get(ip, []) if now - t < 60]
+        if len(q) >= WRITE_PER_MIN:
+            _writes[ip] = q
+            return True
+        q.append(now)
+        _writes[ip] = q
+        return False
 
 
 @app.middleware("http")
@@ -76,6 +101,18 @@ async def _guard(request: Request, call_next):
     # 다른 사이트의 페이지는 이 헤더를 붙이면 브라우저가 사전 확인(CORS)을 하고, 이 서버는 CORS 를 허용하지 않으므로 막힌다.
     # 관리자 판정이 '이 PC(127.0.0.1)에서 온 요청'이라, 관리자가 이 PC에서 악성 페이지를 열면 몰래 관리자 IP 등록·발송이 되던 문제.
     if request.method not in _SAFE_METHODS and request.url.path.startswith("/api/"):
+        is_admin_path = request.url.path.startswith("/api/admin/")
+        try:
+            size = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            size = 0
+        if size > (MAX_BODY_ADMIN if is_admin_path else MAX_BODY):
+            return JSONResponse({"detail": "요청이 너무 큽니다."}, status_code=413)
+        if not is_admin_path:
+            raw = request.client.host if request.client else ""
+            ip, _ = settings_store.client_ip(raw, dict(request.headers))
+            if _too_many_writes(ip or raw or "-"):
+                return JSONResponse({"detail": "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요."}, status_code=429)
         site = request.headers.get("sec-fetch-site", "")
         if request.headers.get("x-requested-with") != "axreview" or site not in ("", "same-origin", "none"):
             # 403 이 아니라 428 — 관리 화면은 403 을 '관리자 아님'으로 보고 토큰 입력 화면으로 넘어가 버려서,
@@ -110,9 +147,23 @@ for route in web.ROUTES:
     app.router.routes.append(route)
 
 # 3) 정적 파일 — 공유 이미지 주소(/app/static/og/…)는 Streamlit 판과 같게 유지
-app.mount("/app/static", StaticFiles(directory=ROOT / "static"), name="static")
+class _CachedStatic(StaticFiles):
+    """Cache-Control 을 붙인 정적 파일 — 예전엔 ETag 만 있어 다시 방문할 때마다 파일마다 확인 요청을 보냈다."""
+
+    def __init__(self, *a, cache: str, **kw):
+        super().__init__(*a, **kw)
+        self._cache_header = cache
+
+    def file_response(self, *a, **kw):
+        resp = super().file_response(*a, **kw)
+        resp.headers["Cache-Control"] = self._cache_header
+        return resp
+
+
+app.mount("/app/static", _CachedStatic(directory=ROOT / "static", cache="public, max-age=86400"), name="static")
 if (DIST / "assets").exists():
-    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
+    # 빌드 파일은 이름에 내용 해시가 들어가 바뀌면 이름도 바뀐다 → 1년 고정 캐시
+    app.mount("/assets", _CachedStatic(directory=DIST / "assets", cache="public, max-age=31536000, immutable"), name="assets")
 
 
 # 4) SPA — 나머지 GET 은 React index.html. 공유 미리보기(제목·설명·썸네일)는 응답 때 페이지별로 넣는다 (app/og_meta.py)
@@ -125,7 +176,7 @@ async def spa(path: str):
         raise HTTPException(status_code=404)
     file = DIST / path
     if path and file.is_file() and DIST in file.resolve().parents:
-        return FileResponse(file)
+        return FileResponse(file, headers={"Cache-Control": "public, max-age=86400"})  # 로고·파비콘 등
     html = _index_html()
     if html is None:
         return HTMLResponse("<h1>AX Review</h1><p>프론트엔드를 아직 빌드하지 않았습니다: <code>cd frontend && npm run build</code></p>", status_code=503)

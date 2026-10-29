@@ -25,9 +25,11 @@ def source_groups() -> dict[str, list[dict]]:
 
 
 def counts() -> dict:
-    sources = source_groups()
-    return {"notes": len(db.notes()), "articles_week": len(db.articles(7)),
-            "sources": sum(len(v) for v in sources.values())}
+    def build():
+        sources = source_groups()
+        return {"notes": len(db.notes()), "articles_week": db.article_count_since(7),
+                "sources": sum(len(v) for v in sources.values())}
+    return cached("site:counts", build, 60)  # 공개 주소라 매번 세지 않게
 
 
 @router.get("/site")

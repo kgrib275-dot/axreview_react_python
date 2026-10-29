@@ -46,17 +46,18 @@ def _may_mail(email: str) -> bool:
 @router.post("/subscribe")
 def subscribe(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     email = _email(payload.get("email"))
+    if payload.get("agree") is not True:
+        raise HTTPException(status_code=400, detail="만 14세 이상만 구독할 수 있습니다.")
+    # 남용 제한을 DNS 확인보다 먼저 — 느린 DNS 를 노린 요청 폭주로 서버 작업 슬롯이 묶이지 않게
+    throttle("subscribe_try", c, per_visitor=3, per_ip=30)
     bad = email_check.problem(email, typo_ok=payload.get("typo_ok") is True)  # 오타·없는 도메인 — 신청 전에 알려 준다
     if bad:
         raise HTTPException(status_code=400, detail=bad)  # {message, suggest} — 화면이 '고친 주소로 신청' 버튼을 보여 준다
-    if payload.get("agree") is not True:
-        raise HTTPException(status_code=400, detail="만 14세 이상만 구독할 수 있습니다.")
     inds = payload.get("industries") or []
     inds = [x for x in inds if isinstance(x, str) and x in industry.NAMES] if isinstance(inds, list) else []
     source = str(payload.get("source") or "header")[:40]
     if source not in SOURCES:
         source = "other"
-    throttle("subscribe_try", c, per_visitor=3, per_ip=30)  # 회사 공용 IP 고려 — 주소별 메일 한도(_may_mail)는 따로
     ref = payload.get("ref")
     ref = ref if isinstance(ref, str) and referral.valid_code(ref) else ""
     token = db.subscribe(email, ",".join(inds), ref)

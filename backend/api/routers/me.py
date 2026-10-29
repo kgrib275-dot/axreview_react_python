@@ -8,6 +8,7 @@ Streamlit 판 streamlit_app.py(방문자 쿠키)와 app/state_keep.py(visitor_st
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
@@ -25,11 +26,15 @@ WIDGET_PREFIXES = ("dq_",)  # 자가진단 문항
 STATE_KEYS = {"axt_step", "axt_answers", "axt_recorded",  # 유형 테스트 진행·결과
               "term_track", "term_i", "term_picks", "term_qs", "term_seen", "term_recorded",  # 용어 퀴즈 진행
               "member_id",  # 월 구독 (다음 방문에 코드를 다시 넣지 않게, 유효성은 매번 다시 확인)
+              "car_picks", "hab_answers",  # AX 커리어 유형·AI 활용 습관 진단 진행 (다른 페이지에 다녀와도 이어서)
               "subscribed", "pref_inds", "diag_weak"}  # 구독 신청 여부(안내 띠 숨김)·고른 업종·자가진단 약한 영역 (개인화)
 MAX_BYTES = 200_000
 
 _SQL = "CREATE TABLE IF NOT EXISTS visitor_state (visitor TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL)"
 _ready: list = []  # 테이블 확인은 프로세스당 한 번
+
+
+SERVER_ONLY = {"member_id"}  # 화면(PUT /me/state)이 바꿀 수 없는 키 — 서버가 확인한 뒤에만 쓴다 (/ask/redeem)
 
 
 def kept(key: str) -> bool:
@@ -123,7 +128,8 @@ def me(c: Caller = CallerDep) -> dict:
         member = {"id": m["id"], "expires": m["expires"], "quota": int(cfg["member_daily"]),
                   "used": membership.used_today(m["id"])}
     return {
-        "visitor": c.visitor, "is_admin": c.is_admin, "member": member, "state": state,
+        # 쿠키 원값은 돌려주지 않는다 (HttpOnly 쿠키를 화면 스크립트로 읽을 수 있게 되므로) — 구분용 짧은 해시만
+        "visitor": hashlib.sha256(c.visitor.encode()).hexdigest()[:12], "is_admin": c.is_admin, "member": member, "state": state,
         "privacy_active": privacy.active(),
         "ask_enabled": bool(cfg["enabled"]) and agent_chat.has_api_keys(),
         "kakao_key": os.environ.get("KAKAO_JS_KEY", ""),  # 카카오 JavaScript 키는 공개 키(도메인 등록으로 보호)
@@ -135,7 +141,8 @@ def me(c: Caller = CallerDep) -> dict:
 def put_state(changes: dict = Body(...), c: Caller = CallerDep) -> dict:
     if not isinstance(changes, dict):
         return {"ok": False}
-    save_state(c.visitor, changes)
+    # member_id 를 화면이 직접 쓰면 번호만 바꿔 남의 월 구독(하루 30회)을 쓸 수 있었다 (2026-10-29 점검)
+    save_state(c.visitor, {k: v for k, v in changes.items() if k not in SERVER_ONLY})
     return {"ok": True}
 
 

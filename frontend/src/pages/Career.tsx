@@ -1,12 +1,13 @@
 // AX 커리어 유형 (/career) — 10문항 × 보기 4개, 한 번에 한 문항. 6가지 유형 중 1·2순위와 직무·역량·학습 경로 (backend app/ax_tests.py).
 // 공유 링크(?c=유형)로 들어오면 친구 결과를 먼저 보여 준다.
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ApiError, get, post } from "../api";
 import { SubscribeCTA } from "../components/Dialogs";
 import NoteCard, { NoteCardData } from "../components/NoteCard";
 import ProfileForm, { ShareReveal, useShareVisit } from "../components/ProfileForm";
 import { Alert, useLoad } from "../components/ui";
+import { useMe } from "../me";
 import "./MoreTests.css";
 
 type Brief = { code: string; emoji: string; name: string; line: string };
@@ -23,23 +24,29 @@ export default function Career() {
   const shared = (params.get("c") || "").toUpperCase();
   const { data, error, loading } = useLoad(() => get<CareerData>("career"), []);
   const friend = useLoad(() => (shared ? get<CareerCard>(`career/${shared}`) : Promise.resolve(null)), [shared]);
-  const [picks, setPicks] = useState<number[]>([]);
+  // 고른 보기는 방문자 상태(car_picks)에 저장 — 다른 페이지에 다녀와도 이어서 풀고, 다 풀었으면 결과를 다시 보여 준다
+  const { state, setState } = useMe();
+  const picks = useMemo(() => (Array.isArray(state.car_picks) ? (state.car_picks as number[]) : []), [state.car_picks]);
   const [res, setRes] = useState<CareerCard | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const total0 = data?.questions.length ?? 0;
+  const key = picks.join(",");
+  useEffect(() => {
+    if (!total0 || picks.length !== total0) { setRes(null); return; }
+    let alive = true;
+    setErr(null);
+    post<CareerCard>("career/result", { picks }).then((r) => alive && setRes(r)).catch((e) => alive && setErr((e as ApiError).message));
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, total0]);
 
   if (loading && !data) return <div className="page-loading">불러오는 중…</div>;
   if (error || !data) return <Alert kind="err">{error || "테스트를 불러오지 못했습니다."}</Alert>;
   const total = data.questions.length;
   const step = picks.length;
 
-  const pick = (i: number) => {
-    const next = [...picks, i];
-    setPicks(next);
-    if (next.length === total) {
-      post<CareerCard>("career/result", { picks: next }).then(setRes).catch((e) => setErr((e as ApiError).message));
-    }
-  };
-  const retry = () => { setPicks([]); setRes(null); setErr(null); };
+  const pick = (i: number) => setState({ car_picks: [...picks.slice(0, total), i].slice(0, total) });
+  const retry = () => { setState({ car_picks: [] }); setRes(null); setErr(null); };
 
   const header = (
     <>
@@ -72,7 +79,7 @@ export default function Career() {
               {data.questions[step].options.map((o, i) => <button key={o} type="button" className="btn mt-opt" onClick={() => pick(i)}>{o}</button>)}
             </div>
           </div>
-          {step > 0 && <button className="btn sm ghost" type="button" style={{ marginTop: 10 }} onClick={() => setPicks(picks.slice(0, -1))}>← 이전 문항</button>}
+          {step > 0 && <button className="btn sm ghost" type="button" style={{ marginTop: 10 }} onClick={() => setState({ car_picks: picks.slice(0, -1) })}>← 이전 문항</button>}
         </>
       )}
       {step === total && err && <><Alert kind="err">{err}</Alert><button className="btn" onClick={retry}>↻ 다시 하기</button></>}

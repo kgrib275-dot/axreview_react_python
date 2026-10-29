@@ -178,8 +178,12 @@ def _tool_specs(funcs) -> list[dict]:
     return out
 
 
+ASK_MAX_TOKENS = 4000      # 질문하기 답 한 번의 출력 상한 (생각 포함) — 공개 기능이라 한 질문의 비용을 묶는다
+TOOL_RESULT_CHARS = 15000  # 도구 결과 한 건을 모델에 넘기는 최대 글자 수
+
+
 def chat(system: str, history: list[dict], message: str, funcs=None, web_search: bool = False,
-         max_rounds: int = 6) -> str:
+         max_rounds: int = 4) -> str:
     """질문하기 대화. funcs(파이썬 함수)를 도구로 주고, 모델이 부르면 실행해 결과를 돌려주는 걸 반복한다.
     web_search 면 Anthropic 서버의 웹 검색 도구를 쓴다 (실행은 서버가 하므로 루프가 필요 없다)."""
     m = model()
@@ -190,13 +194,13 @@ def chat(system: str, history: list[dict], message: str, funcs=None, web_search:
         by_name = {f.__name__: f for f in funcs}
     if web_search:
         tools.append({"type": "web_search_20260209" if m in _DYNAMIC_WEB else "web_search_20250305",
-                      "name": "web_search", "max_uses": 3})
+                      "name": "web_search", "max_uses": 2})
     messages: list = [{"role": "user" if t["role"] == "user" else "assistant", "content": t["content"]}
                       for t in history if t.get("content")]
     messages.append({"role": "user", "content": message})
     msg = None
     for _ in range(max_rounds):
-        msg = _request(m, "medium", 16000, system, messages, tools or None)
+        msg = _request(m, "medium", ASK_MAX_TOKENS, system, messages, tools or None)
         if msg.stop_reason == "pause_turn":  # 서버 도구(웹 검색)가 길어져 잠시 멈춤 — 이어서 보낸다
             messages.append({"role": "assistant", "content": msg.content})
             continue
@@ -214,7 +218,7 @@ def chat(system: str, history: list[dict], message: str, funcs=None, web_search:
                 allowed = inspect.signature(f).parameters  # 함수가 받는 인자만 넘긴다 (모르는 인자는 버림)
                 out = f(**{k: v for k, v in args.items() if k in allowed})
                 results.append({"type": "tool_result", "tool_use_id": b.id,
-                                "content": json.dumps(out, ensure_ascii=False, default=str)[:60000]})
+                                "content": json.dumps(out, ensure_ascii=False, default=str)[:TOOL_RESULT_CHARS]})
             except Exception as e:  # noqa: BLE001 - 도구 실패는 모델에게 알려 다른 길을 찾게 한다
                 log.warning("질문하기 도구 %s 실패: %s", b.name, e)
                 results.append({"type": "tool_result", "tool_use_id": b.id, "content": f"오류: {e}", "is_error": True})

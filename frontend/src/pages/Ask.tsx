@@ -72,7 +72,7 @@ export default function Ask() {
     setBusy("web");
     try {
       const r = await post<{ answer: string }>("ask/web", { question, history: history.slice(0, i - 1).map((t) => ({ role: t.role, content: t.content })) });
-      setHistory((h) => [...h, { role: "assistant", content: r.answer + "\n\n*웹 검색 기반 답변입니다.*" }]);
+      setHistory((h) => [...h, { role: "assistant", content: r.answer }]);  // '웹 검색 기반' 문구는 서버가 붙인다
       reload();
     } catch (e) {
       const err = e as ApiError;
@@ -193,7 +193,7 @@ function RedeemForm({ onDone, memberDaily }: { onDone: () => void; memberDaily: 
     setMsg(null);
     try {
       const r = await post<{ expires: string; quota?: number; id?: number }>("ask/redeem", { code: code.trim() });
-      if (r.id !== undefined) setState({ member_id: r.id });
+      // member_id 는 서버가 코드 확인 뒤 저장한다 (화면이 직접 쓰지 않음)
       setMsg({ kind: "ok", text: `월 구독이 적용됐습니다. ${r.expires}까지 하루 ${r.quota ?? memberDaily}회` });
       setCode("");
       onDone();
@@ -262,8 +262,10 @@ function inline(s: string): React.ReactNode[] {
     else if (t.startsWith("[")) {
       const lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(t);
       const href = lm?.[2] || "";
-      const safe = /^(https?:\/\/|\/)/.test(href);
-      out.push(safe ? <a key={k++} href={href} target={href.startsWith("/") ? "_self" : "_blank"} rel="noopener">{lm?.[1]}</a> : lm?.[1]);
+      // 사이트 안 경로(/notes…)와 http(s)만 링크로. '//evil.com'·'/\evil.com' 처럼 다른 사이트로 가는 경로는 막는다
+      const internal = /^\/(?![/\\])/.test(href);
+      const safe = internal || /^https?:\/\//i.test(href);
+      out.push(safe ? <a key={k++} href={href} target={internal ? "_self" : "_blank"} rel="noopener noreferrer">{lm?.[1]}</a> : lm?.[1]);
     } else out.push(<i key={k++}>{t.slice(1, -1)}</i>);
     last = m.index + t.length;
   }

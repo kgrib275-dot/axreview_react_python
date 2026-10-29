@@ -22,11 +22,22 @@ NAMES = list(INDUSTRIES)
 _RES = {k: re.compile("|".join(re.escape(w) for w in ws), re.I) for k, ws in INDUSTRIES.items()}
 
 
+_memo: dict[tuple, list[str]] = {}
+
+
 def of(note: dict, min_hits: int = 2) -> list[str]:
-    """노트가 속한 업종들. 제목·태그·요약에 한 번이면 바로, 본문에만 있으면 min_hits번 이상 나와야 한다 (지나가는 언급 제외)."""
+    """노트가 속한 업종들. 제목·태그·요약에 한 번이면 바로, 본문에만 있으면 min_hits번 이상 나와야 한다 (지나가는 언급 제외).
+    노트 목록 요청마다 본문 전체에 정규식을 돌리지 않게 같은 내용이면 기억해 둔 결과를 쓴다."""
     head = f"{note.get('title', '')} {note.get('tags', '')} {note.get('summary', '')}"
     body = note.get("body", "") or ""
-    return [k for k, rx in _RES.items() if rx.search(head) or len(rx.findall(body)) >= min_hits]
+    key = (head, hash(body), min_hits)
+    hit = _memo.get(key)
+    if hit is None:
+        hit = [k for k, rx in _RES.items() if rx.search(head) or len(rx.findall(body)) >= min_hits]
+        if len(_memo) > 5000:
+            _memo.clear()
+        _memo[key] = hit
+    return list(hit)
 
 
 def filter_notes(notes: list[dict], wanted: list[str]) -> list[dict]:

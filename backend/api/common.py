@@ -52,4 +52,16 @@ def cached(key: str, fn, ttl: float):
         lock.release()
 
 
-__all__ = ["md_html", "note_card", "csv_list", "cached"]
+def cached_set(key: str, val) -> None:
+    """계산해 둔 값을 바로 캐시에 넣는다 (방금 바뀐 값을 다음 요청들이 쓰게)."""
+    _cache[key] = (time.monotonic(), val)
+
+
+def prune(prefix: str, keep: set[str]) -> None:
+    """날짜별 키처럼 계속 늘어나는 캐시 키 정리."""
+    for k in [k for k in _cache if k.startswith(prefix) and k not in keep]:
+        _cache.pop(k, None)
+        _locks.pop(k, None)
+
+
+__all__ = ["md_html", "note_card", "csv_list", "cached", "cached_set", "prune"]

@@ -64,12 +64,19 @@ export function startFx(): void {
         el.classList.add("ax-rv"); io.observe(el);
       });
     }
+    ensureSweep();
     initSphere();
   };
-  // 관찰이 실패해도 내용이 숨겨진 채로 남지 않게
-  setInterval(() => doc.querySelectorAll(".ax-rv").forEach((el) => {
-    if (el.getBoundingClientRect().top < innerHeight) { el.classList.add("ax-in"); el.classList.remove("ax-rv"); }
-  }), 1500);
+  // 관찰이 실패해도 내용이 숨겨진 채로 남지 않게 — 숨은 요소가 있을 때만 돈다 (늘 깨어 있으면 휴대폰 배터리를 쓴다)
+  let sweep = 0;
+  const ensureSweep = () => {
+    if (sweep || !doc.querySelector(".ax-rv")) return;
+    sweep = window.setInterval(() => {
+      const left = doc.querySelectorAll(".ax-rv");
+      left.forEach((el) => { if (el.getBoundingClientRect().top < innerHeight) { el.classList.add("ax-in"); el.classList.remove("ax-rv"); } });
+      if (!doc.querySelector(".ax-rv")) { clearInterval(sweep); sweep = 0; }
+    }, 1500);
+  };
   let pending = false;
   new MutationObserver(() => {
     if (pending) return; pending = true;
@@ -91,11 +98,23 @@ export function startFx(): void {
       const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = Math.PI * (3 - Math.sqrt(5)) * i;
       pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
     }
-    let rx = 0.35, ry = 0, visible = true, raf = 0;
-    new IntersectionObserver((es) => { visible = es[0].isIntersecting; if (visible && !raf) raf = requestAnimationFrame(draw); }).observe(cv);
-    function draw() {
+    // 가까운 점 쌍은 회전해도 바뀌지 않는다 — 처음 한 번만 찾는다 (예전엔 매 프레임 1만6천 쌍을 비교: 홈 CPU 데스크톱 27%·휴대폰 64%).
+    // 화면에서의 거리는 원근에 따라 최대 1.7배까지 달라지므로 3D 거리 0.4 안쪽을 후보로 두고, 그리기 때 화면 거리로 다시 거른다.
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+      const dx = pts[i][0] - pts[j][0], dy = pts[i][1] - pts[j][1], dz = pts[i][2] - pts[j][2];
+      if (dx * dx + dy * dy + dz * dz < 0.16) pairs.push([i, j]);
+    }
+    // 휴대폰·터치 기기·움직임 줄이기는 정지 화면 한 장 (배터리), 그 밖은 초당 30프레임
+    const still = reduce || !fine || innerWidth < 760;
+    let rx = 0.35, ry = 0, visible = true, raf = 0, last = 0;
+    new IntersectionObserver((es) => { visible = es[0].isIntersecting; if (visible && !raf && !still) raf = requestAnimationFrame(draw); }).observe(cv);
+    const BUCKETS = 6;
+    function draw(t = 0) {
       raf = 0;
       if (!cv.isConnected || !ctx) return;
+      if (!still && t - last < 33) { if (visible && !doc.hidden) raf = requestAnimationFrame(draw); return; }
+      last = t;
       const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
       if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
@@ -108,22 +127,40 @@ export function startFx(): void {
       }
       ctx.lineWidth = 0.7;
       const lim = (R * 0.26) ** 2;
-      for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
+      // 선은 투명도 6단계로 묶어 단계마다 한 번에 그린다 (선마다 stroke 하던 것)
+      const paths = Array.from({ length: BUCKETS }, () => new Path2D());
+      const used = new Array(BUCKETS).fill(false);
+      for (const [i, j] of pairs) {
         const dx = P[i][0] - P[j][0], dy = P[i][1] - P[j][1], d = dx * dx + dy * dy;
-        if (d < lim) {
-          const a = (1 - d / lim) * (0.35 - (P[i][2] + P[j][2]) * 0.12);
-          if (a > 0) { ctx.strokeStyle = `rgba(46,155,234,${a})`; ctx.beginPath(); ctx.moveTo(P[i][0], P[i][1]); ctx.lineTo(P[j][0], P[j][1]); ctx.stroke(); }
-        }
+        if (d >= lim) continue;
+        const a = (1 - d / lim) * (0.35 - (P[i][2] + P[j][2]) * 0.12);
+        if (a <= 0) continue;
+        const b = Math.min(BUCKETS - 1, Math.floor((a / 0.59) * BUCKETS));
+        paths[b].moveTo(P[i][0], P[i][1]); paths[b].lineTo(P[j][0], P[j][1]); used[b] = true;
       }
+      for (let b = 0; b < BUCKETS; b++) {
+        if (!used[b]) continue;
+        ctx.strokeStyle = `rgba(46,155,234,${((b + 0.5) / BUCKETS) * 0.59})`; ctx.stroke(paths[b]);
+      }
+      // 점: 앞쪽(밝은 하늘색·크게)과 나머지, 각각 투명도 단계로 묶는다
+      const dots = [Array.from({ length: BUCKETS }, () => new Path2D()), Array.from({ length: BUCKETS }, () => new Path2D())];
       for (const [x, y, z] of P) {
-        const a = 0.25 + (1 - z) * 0.38;
-        ctx.fillStyle = z < -0.3 ? `rgba(91,194,245,${a})` : `rgba(46,155,234,${a})`;
-        ctx.beginPath(); ctx.arc(x, y, z < -0.3 ? 2.2 : 1.5, 0, 6.283); ctx.fill();
+        const front = z < -0.3 ? 0 : 1, r = front === 0 ? 2.2 : 1.5;
+        const a = 0.25 + (1 - z) * 0.38;  // 0.25 ~ 1.01
+        const b = Math.max(0, Math.min(BUCKETS - 1, Math.floor(((a - 0.25) / 0.76) * BUCKETS)));
+        dots[front][b].moveTo(x + r, y); dots[front][b].arc(x, y, r, 0, 6.283);
       }
-      if (visible && !reduce && !doc.hidden) raf = requestAnimationFrame(draw);
+      for (let f = 0; f < 2; f++) for (let b = 0; b < BUCKETS; b++) {
+        ctx.fillStyle = `rgba(${f === 0 ? "91,194,245" : "46,155,234"},${0.25 + ((b + 0.5) / BUCKETS) * 0.76})`; ctx.fill(dots[f][b]);
+      }
+      if (visible && !still && !doc.hidden) raf = requestAnimationFrame(draw);
     }
-    raf = requestAnimationFrame(draw);
-    doc.addEventListener("visibilitychange", () => { if (!doc.hidden && visible && !raf) raf = requestAnimationFrame(draw); });
+    // 첫 프레임은 페이지가 한가할 때 (첫 화면 그리기를 막지 않게)
+    const start = () => { raf = requestAnimationFrame(draw); };
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: object) => number }).requestIdleCallback;
+    if (ric) ric(start, { timeout: 800 }); else setTimeout(start, 200);
+    doc.addEventListener("visibilitychange", () => { if (!doc.hidden && visible && !raf && !still) raf = requestAnimationFrame(draw); });
+    if (still) addEventListener("resize", () => { if (!raf) raf = requestAnimationFrame(draw); }, { passive: true });
   }
 
   scan(); onScroll();
