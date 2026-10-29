@@ -152,11 +152,12 @@ export default function Today() {
         </>
       )}
 
-      <div className="space" />
+      <div className="space" id="map" />
       <div className="eyebrow">Participation Map</div>
       <h3 className="sec-h" style={{ fontSize: "1.35rem" }}>어디서 <span className="grad">참여하고 있을까?</span></h3>
       <p className="caption" style={{ margin: "-6px 0 8px" }}>참여 통계에 보태 주신 분들의 국가·지역·연령대 기준입니다. 나라를 누르면 성별·연령대·유형 분포가 나옵니다.</p>
       {data?.map_html ? <MapFrame html={data.map_html} /> : <p className="caption">참여 지도를 불러오는 중…</p>}
+      {data?.map_html && <JumpToHash />}
     </div>
   );
 }
@@ -224,4 +225,14 @@ function YesterdayBox({ r }: { r: NonNullable<Yesterday> }) {
       <em>{crowd} · {hit}</em>
     </div>
   );
+}
+
+/** 홈 맛보기의 '참여 지도 →'(/today#map) — 페이지를 그린 뒤 그 위치로 옮긴다 (Layout 이 경로가 바뀌면 맨 위로 올리므로). */
+function JumpToHash() {
+  useEffect(() => {
+    if (window.location.hash !== "#map") return;
+    const t = setTimeout(() => document.getElementById("map")?.scrollIntoView({ block: "start" }), 300);
+    return () => clearTimeout(t);
+  }, []);
+  return null;
 }

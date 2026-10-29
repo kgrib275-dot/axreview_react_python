@@ -14,6 +14,8 @@ const About = L(() => import("./pages/About"));
 const TypeTest = L(() => import("./pages/TypeTest"));
 const Terms = L(() => import("./pages/Terms"));
 const Diagnosis = L(() => import("./pages/Diagnosis"));
+const Habit = L(() => import("./pages/Habit"));
+const Career = L(() => import("./pages/Career"));
 const Letter = L(() => import("./pages/Letter"));
 const Refer = L(() => import("./pages/Refer"));
 const Confirm = L(() => import("./pages/Confirm"));
@@ -37,6 +39,8 @@ export default function App() {
             <Route path="/type" element={<TypeTest />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/diagnosis" element={<Diagnosis />} />
+            <Route path="/habit" element={<Habit />} />
+            <Route path="/career" element={<Career />} />
             <Route path="/letter" element={<Letter />} />
             <Route path="/refer" element={<Refer />} />
             <Route path="/confirm" element={<Confirm />} />

@@ -150,7 +150,8 @@ def note_index(request: Request) -> Response:
 def sitemap(request: Request) -> Response:
     site = _site(request)
     urls = [(f"{site}/", None), (f"{site}/n/", None), (f"{site}/letter", None), (f"{site}/about", None),
-            (f"{site}/type", None), (f"{site}/diagnosis", None), (f"{site}/terms", None)]
+            (f"{site}/type", None), (f"{site}/diagnosis", None), (f"{site}/terms", None),
+            (f"{site}/habit", None), (f"{site}/career", None)]
     urls += [(f"{site}/n/{n['id']}", n["published"]) for n in db.notes("published")]
     xml = "".join(f"<url><loc>{escape(u)}</loc>" + (f"<lastmod>{escape(d)}</lastmod>" if d else "") + "</url>" for u, d in urls)
     return Response(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{xml}</urlset>',
@@ -221,6 +222,27 @@ def share_terms(request: Request) -> Response:
                   "og.png", f"/terms?{urlencode({'track': track, 'score': score, 's': 1})}")
 
 
+def share_habit(request: Request) -> Response:
+    from app import ax_tests
+    q = request.query_params
+    lv, score = q.get("l", ""), q.get("score", "")
+    if not (lv.isdigit() and int(lv) < len(ax_tests.HABIT_LEVELS) and score.isdigit() and int(score) <= 100):
+        return RedirectResponse("/habit")
+    _, emoji, name, line = ax_tests.HABIT_LEVELS[int(lv)]
+    return _share(request, f"내 AI 활용 습관은 {emoji} {name} 단계 ({score}점) — AI 활용 습관 진단",
+                  f"{line} 10문항·1분이면 내 단계와 다음에 해 볼 3가지가 나옵니다.", "og.png", f"/habit?{urlencode({'s': 1})}")
+
+
+def share_career(request: Request) -> Response:
+    from app import ax_tests
+    code = request.path_params["code"].upper()
+    if code not in ax_tests.CAREER_TYPES:
+        return RedirectResponse("/career")
+    emoji, name, line, *_ = ax_tests.CAREER_TYPES[code]
+    return _share(request, f"나는 {emoji} {name} — AX 커리어 유형", f"{line}. 10문항으로 6가지 AX 커리어 유형 중 내 유형과 학습 경로를 알아보세요.",
+                  "og.png", f"/career?{urlencode({'c': code, 's': 1})}")
+
+
 # ───────────────────────── 주간 PDF ─────────────────────────
 
 def report_pdf(request: Request) -> Response:
@@ -242,5 +264,6 @@ ROUTES = [
     Route("/n/", note_index), Route("/n/{id:int}", note_page),
     Route("/sitemap.xml", sitemap), Route("/robots.txt", robots),
     Route("/s/t/{code}", share_type), Route("/s/d", share_diag), Route("/s/q", share_quiz), Route("/s/terms", share_terms),
+    Route("/s/h", share_habit), Route("/s/c/{code}", share_career),
     Route("/r/{name}", report_pdf),
 ]

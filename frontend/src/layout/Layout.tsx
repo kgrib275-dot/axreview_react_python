@@ -11,7 +11,7 @@ import { LangToggle } from "./Translate";
 const NAV = [
   ["/", "✦ 이번 호"], ["/notes", "노트"], ["/today", "오늘의 AX"], ["/lab", "데이터 랩"], ["/ask", "AX 질문하기"], ["/about", "소개"],
 ] as const;
-const PLAY = [["/type", "AX 리더 유형 테스트"], ["/terms", "AI·AX 용어 퀴즈"], ["/diagnosis", "AX 준비도 자가진단"]] as const;
+const PLAY = [["/type", "AX 리더 유형 테스트"], ["/career", "AX 커리어 유형"], ["/habit", "AI 활용 습관 진단"], ["/terms", "AI·AX 용어 퀴즈"], ["/diagnosis", "AX 준비도 자가진단"]] as const;
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (

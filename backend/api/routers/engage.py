@@ -15,7 +15,7 @@ from pipeline import engage, referral
 router = APIRouter(tags=["engage"])
 
 # 화면이 직접 남길 수 있는 종류 — 그 밖의 kind 는 거부한다 (통계를 오염시키지 못하게)
-KINDS = {"share", "share_visit", "subscribe_open", "ref_visit", "member_request_open"}
+KINDS = {"share", "share_visit", "subscribe_open", "ref_visit", "member_request_open", "try_click"}  # try_click: 홈 맛보기 클릭 (어느 것이 잘 먹히는지)
 CONTENTS = {"today", "type_test", "terms", "diagnosis", "notes", "note_detail", "lab", "letter", "refer", "about",
             "home_hero", "home_cta", "header", "sticky_bar"}
 

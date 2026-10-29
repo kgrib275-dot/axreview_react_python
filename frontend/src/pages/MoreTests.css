@@ -1,0 +1,32 @@
+/* AI 활용 습관 진단(/habit)·AX 커리어 유형(/career) — 유형 테스트(TypeTest.css)와 같은 결의 카드 */
+.mt-page .ax-q{font-size:1.15rem;font-weight:700;line-height:1.5;margin:4px 0 12px}
+.mt-page .progress{display:flex;align-items:center;gap:12px;margin:14px 0 10px;font-size:.84rem;color:var(--ink-2)}
+.mt-page .progress .bar{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.mt-page .progress .fil{height:100%;background:linear-gradient(90deg,var(--accent-deep),var(--accent-2));transition:width .3s}
+.mt-page .progress span{white-space:nowrap}
+.mt-dim{font-family:var(--f-mono);font-size:.74rem;letter-spacing:.12em;color:var(--accent-2);text-transform:uppercase}
+.mt-scale{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.mt-choices{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mt-q .btn.mt-opt{min-height:64px;font-size:.95rem;white-space:normal;line-height:1.45;width:100%}
+@media (max-width:640px){.mt-scale{grid-template-columns:1fr 1fr}.mt-choices{grid-template-columns:1fr}}
+
+.mt-card{text-align:center;padding:28px 22px;border-radius:22px;border:1px solid rgba(46,155,234,.45);margin:6px 0 14px;
+  background:radial-gradient(500px circle at 50% 0%,rgba(10,111,214,.3),transparent 70%),var(--surface)}
+.mt-emoji{font-size:3.4rem;line-height:1}
+.mt-kicker{font-family:var(--f-mono);letter-spacing:.2em;font-size:.76rem;color:var(--accent-2);margin-top:8px}
+.mt-card h2{font-family:var(--f-display);font-weight:900;font-size:clamp(1.7rem,5vw,2.4rem);margin:6px 0}
+.mt-score{font-size:.55em;color:var(--accent-2);vertical-align:middle}
+.mt-line{color:var(--ink-2);font-size:1rem;margin:0 auto 10px;max-width:560px}
+.mt-rare{display:inline-block;font-size:.82rem;color:var(--warn-soft);border:1px solid rgba(250,178,25,.45);border-radius:999px;padding:4px 12px;margin-bottom:14px}
+.mt-bars{display:grid;gap:8px;max-width:560px;margin:6px auto 16px}
+.mt-bar{display:grid;grid-template-columns:9em 1fr 2.4em;gap:10px;align-items:center;font-size:.82rem;color:var(--muted);text-align:left}
+.mt-bar span.on{color:var(--ink);font-weight:700}.mt-bar span.weak{color:var(--warn-soft);font-weight:700}
+.mt-bar .trk{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.mt-bar .fil{height:100%;border-radius:4px;background:var(--accent)}
+.mt-bar b{color:var(--ink);text-align:right}
+.mt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;text-align:left}
+.mt-grid div{background:var(--surface-2);border-radius:12px;padding:12px}.mt-grid span{display:block;font-size:.72rem;color:var(--muted)}
+.mt-grid b{font-size:.86rem;line-height:1.5;font-weight:600}
+.mt-next{margin:0 0 14px}.mt-next h3{font-size:1.1rem;margin:0 0 8px}
+.mt-next ol{margin:0;padding-left:1.3em;display:grid;gap:6px;color:var(--ink-2)}
+@media (max-width:640px){.mt-bar{grid-template-columns:7.5em 1fr 2.2em;font-size:.76rem}}

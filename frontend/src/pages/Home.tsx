@@ -8,6 +8,7 @@ import { useDialogs } from "../components/Dialogs";
 import NoteCard, { NoteCardData } from "../components/NoteCard";
 import { SectionHead, useLoad } from "../components/ui";
 import "./Home.css";
+import TryIt from "./TryIt";
 
 export const CATEGORIES = ["AX Strategy", "AX Implementation", "AX Enablement"];
 
@@ -204,6 +205,9 @@ export default function HomePage() {
         <Link to="/today"><span className="n">03 · 30초</span><b>오늘의 AX 퀴즈·예측</b>
           <span>실제 수집 데이터로 만든 3문제와 '내일의 키워드' 투표. 매일 새로 나옵니다.</span><em>🔥 연속 참여 기록</em></Link>
       </div>
+
+      {/* ---------- 1분 안에 해 보기 (각 페이지 인터랙션 맛보기) ---------- */}
+      <TryIt />
 
       {/* ---------- 이번 주 흐름 ---------- */}
       <div id="this-week" />

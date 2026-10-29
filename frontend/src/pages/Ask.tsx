@@ -24,7 +24,8 @@ export default function Ask() {
   const { openMembership } = useDialogs();
   const { data: usage, error, loading, reload, setData } = useLoad<Usage>(() => get<Usage>("ask/usage"), []);
   const [history, setHistory] = useState<Turn[]>(() => loadHistory());
-  const [q, setQ] = useState("");
+  // 홈 맛보기의 예시 질문(?q=)은 입력칸에 채워만 둔다 — 질문 한도를 쓰는 전송은 본인이 누른다
+  const [q, setQ] = useState(() => (new URLSearchParams(window.location.search).get("q") || "").slice(0, 500));
   const [busy, setBusy] = useState<"ask" | "web" | null>(null);
   const [warn, setWarn] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null); // 답을 기다리는 중인 질문

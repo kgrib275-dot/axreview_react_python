@@ -122,3 +122,40 @@ strong.hl{color:var(--ink);font-weight:800;background:linear-gradient(transparen
   .cta{padding:28px 20px;border-radius:18px}
   .cta-btn{width:100%}
 }
+
+/* 1분 안에 해 보기 (TryIt.tsx) — 각 페이지 인터랙션의 맛보기 */
+.tryit{margin:0 0 30px}
+.try-skel{height:260px;border-radius:16px;background:var(--surface);border:1px solid var(--line);opacity:.6}
+.try-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.try-tile{display:flex;flex-direction:column;gap:8px;padding:16px 18px;border-radius:16px;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink);text-decoration:none;min-width:0;transition:border-color .2s,transform .2s}
+a.try-tile:hover{border-color:var(--accent);transform:translateY(-2px)}
+.try-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-family:var(--f-mono);font-size:.72rem;color:var(--accent-2)}
+.try-h a,.try-h em{font-style:normal;color:var(--muted);text-decoration:none;white-space:nowrap}
+.try-quiz{grid-column:span 2}
+.try-q{margin:0;font-weight:700;font-size:1.02rem;line-height:1.5}
+.try-opts{display:flex;flex-wrap:wrap;gap:8px}
+.try-opts .btn.right{border-color:var(--ok);color:var(--ok-ink)}
+.try-opts .btn.wrong{border-color:var(--danger);color:var(--err-ink)}
+.try-res{margin:2px 0 0;font-size:.88rem;color:var(--ink-2)}
+.try-tests{grid-row:span 3;gap:4px}
+.try-test{display:grid;grid-template-columns:1.8em 1fr auto;gap:8px;align-items:center;padding:8px 6px;border-radius:10px;color:var(--ink);text-decoration:none}
+.try-test:hover{background:var(--surface-2)}
+.try-test i{font-style:normal;font-size:1.2rem;text-align:center}
+.try-test b{display:block;font-size:.9rem}.try-test small{display:block;font-size:.76rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.try-test em{font-style:normal;font-size:.74rem;color:var(--accent-2);white-space:nowrap}
+.spark-row{display:grid;grid-template-columns:1fr 90px 2.4em;gap:8px;align-items:center;font-size:.86rem}
+.spark-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.spark-row b{text-align:right}
+.spark{color:var(--accent-2)}
+.people-big b{font-family:var(--f-display);font-size:2rem;font-weight:800;margin-right:6px}.people-big span{font-size:.84rem;color:var(--muted)}
+.people-top{display:grid;gap:6px}
+.people-top div{display:grid;grid-template-columns:5.5em 1fr;gap:8px;align-items:center;font-size:.82rem}
+.people-top .trk{height:7px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.people-top .fil{height:100%;background:var(--accent);border-radius:4px}
+.try-ask{gap:6px;grid-column:span 2}
+.try-ask .ask-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.ask-chip{display:block;padding:8px 10px;border-radius:10px;border:1px solid var(--line);font-size:.84rem;color:var(--ink-2);text-decoration:none;line-height:1.45}
+.ask-chip:hover{border-color:var(--accent);color:var(--ink)}
+@media (max-width:1024px){.try-grid{grid-template-columns:1fr 1fr}.try-quiz,.try-ask{grid-column:span 2}.try-tests{grid-row:auto}}
+@media (max-width:820px){.try-ask .ask-list{grid-template-columns:1fr}}
+@media (max-width:640px){.try-grid{grid-template-columns:1fr}.try-quiz,.try-ask{grid-column:auto}}
