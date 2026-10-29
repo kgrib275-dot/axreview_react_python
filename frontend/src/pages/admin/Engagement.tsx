@@ -5,7 +5,7 @@ import { get } from "../../api";
 import { Alert, Metric, Tabs, useLoad } from "../../components/ui";
 import { A, AdminHead, Bar, Bars, Check, CsvButton, DataTable, Expander, Generic, HBars, Row, Seg, asArray, bool, isObj, num, pick, qs, str, useAct } from "./common";
 
-const TABS = ["일별 추이", "구독 유입", "유형 비교", "퀴즈", "용어 퀴즈", "예측 투표", "참여 지도"];
+const TABS = ["전체 현황", "일별 추이", "구독 유입", "맛보기", "유형 비교", "커리어 유형", "습관 진단", "자가진단", "퀴즈", "용어 퀴즈", "예측 투표", "참여 지도"];
 const BY: Record<string, string> = { age: "연령대", gender: "성별", country: "국가", region: "시·도" };
 const sec = (d: Row, ...keys: string[]) => { const v = pick(d, ...keys); return isObj(v) ? v : {}; };
 
@@ -31,15 +31,24 @@ export default function Engagement() {
   const m = sec(d, "metrics", "summary");
   const kinds = sec(d, "kinds", "counts");
   const n = (...k: string[]) => num(pick(m, ...k) ?? pick(kinds, ...k));
-  const sampleCount = num(pick(d, "sample_count"));
-  const sampleOnMap = bool(pick(d, "sample_on_map"));
+  // 서버는 sample: {count, on_map} 로 보낸다 (예전 이름 sample_count·sample_on_map 도 받는다)
+  const sampleCount = num(pick(sec(d, "sample"), "count") ?? pick(d, "sample_count"));
+  const sampleOnMap = bool(pick(sec(d, "sample"), "on_map") ?? pick(d, "sample_on_map"));
+  // 재참여율: summary.retention 은 {visitors, returning, rate}
+  const ret = pick(m, "retention_rate", "retention");
+  const retRate = isObj(ret) ? num(pick(ret, "rate")) : num(ret ?? pick(sec(d, "retention"), "rate") ?? 0);
   const daily = asArray(pick(d, "daily", "daily_activity"));
   const funnel = asArray(pick(d, "funnel", "funnel_by_source", "subscribe"));
   const types = sec(d, "types", "type_test");
   const quiz = sec(d, "quiz");
   const term = sec(d, "term", "term_quiz");
   const polls = asArray(pick(d, "polls", "poll"));
-  const known = new Set(["metrics", "summary", "kinds", "counts", "sample_count", "sample_on_map", "daily", "daily_activity", "funnel", "funnel_by_source", "subscribe", "types", "type_test", "quiz", "term", "term_quiz", "polls", "poll", "retention", "visitors", "empty", "days", "sample"]);
+  const all = sec(d, "all");
+  const tryTab = sec(d, "try");
+  const habit = sec(d, "habit");
+  const career = sec(d, "career");
+  const diag = sec(d, "diag");
+  const known = new Set(["all", "try", "habit", "career", "diag", "map", "map_html_url", "metrics", "summary", "kinds", "counts", "sample_count", "sample_on_map", "daily", "daily_activity", "funnel", "funnel_by_source", "subscribe", "types", "type_test", "quiz", "term", "term_quiz", "polls", "poll", "retention", "visitors", "empty", "days", "sample"]);
   const unknown = Object.fromEntries(Object.entries(d).filter(([k]) => !known.has(k)));
   const dailySeries = daily.length ? ["참여자", "유형 테스트", "퀴즈 응답", "투표"].filter((s) => s in daily[0]) : [];
   const empty = pick(d, "empty") === true || (!daily.length && n("visitors") === 0 && !Object.keys(kinds).length);
@@ -65,17 +74,66 @@ export default function Engagement() {
       {error && <Alert kind="err">{error}</Alert>}
       <div className="metrics">
         <Metric k="참여 방문자" v={n("visitors", "participants")} />
-        <Metric k="재참여율" v={`${str(pick(m, "retention_rate", "retention") ?? pick(sec(d, "retention"), "rate") ?? 0)}%`} />
+        <Metric k="재참여율" v={`${retRate}%`} />
         <Metric k="유형 테스트" v={n("type_test")} />
         <Metric k="퀴즈 응답" v={n("quiz")} />
         <Metric k="용어 퀴즈" v={n("term_quiz")} />
         <Metric k="예측 투표" v={n("poll")} />
         <Metric k="공유 → 유입" v={`${n("share")} → ${n("share_visit")}`} />
         <Metric k="구독 완료" v={n("subscribe")} />
+        <Metric k="커리어 유형" v={n("career")} />
+        <Metric k="습관 진단" v={n("habit")} />
+        <Metric k="자가진단" v={n("diagnosis")} />
+        <Metric k="맛보기 클릭" v={n("try_click")} />
+        <Metric k="질문하기" v={n("ask")} />
       </div>
       {empty && data && <Alert kind="info">아직 이 기간의 참여 기록이 없습니다. /type, /today 에서 참여가 생기면 여기에 쌓입니다.</Alert>}
 
       <Tabs items={TABS} value={tab} onChange={setTab} />
+      {tab === "전체 현황" && (
+        <div>
+          <p className="caption">사이트에서 기록되는 모든 참여 종류입니다. 새 기능이 기록을 남기기 시작하면 이 표에 자동으로 추가됩니다. 방문자는 익명 쿠키 기준입니다.</p>
+          <DataTable rows={asArray(pick(all, "engagements"))} />
+          <p className="caption" style={{ marginTop: 14 }}>서버 접속 기록 (노트 상세 보기·의미 검색·질문하기·남용 제한 등 — IP 는 개수만, 90일 보관)</p>
+          <DataTable rows={asArray(pick(all, "access"))} />
+        </div>
+      )}
+      {tab === "맛보기" && (pick(tryTab, "empty") === false ? (
+        <div>
+          <p className="caption">홈 '1분 안에 해 보기'에서 무엇을 많이 눌렀는지 — 많이 눌리는 것을 앞쪽에 두세요.</p>
+          <HBars items={asArray(pick(tryTab, "items")).map((r) => [str(r["맛보기"]), num(r["클릭"])] as [string, number])} />
+          <DataTable rows={asArray(pick(tryTab, "items"))} />
+          <p className="caption" style={{ marginTop: 10 }}>일별 클릭</p>
+          <DataTable rows={asArray(pick(tryTab, "daily"))} />
+        </div>
+      ) : <p className="caption">아직 맛보기 클릭이 없습니다.</p>)}
+      {tab === "커리어 유형" && (pick(career, "empty") === false ? (
+        <div>
+          <p className="caption">참여 {num(pick(career, "n"))}건 · 1순위·2순위 유형 분포</p>
+          <HBars items={asArray(pick(career, "types")).map((r) => [str(r["유형"]), num(r["1순위"])] as [string, number])} />
+          <DataTable rows={asArray(pick(career, "types"))} />
+          <p className="caption" style={{ marginTop: 10 }}>연령대별 유형 비율(%)</p>
+          <Generic value={pick(career, "by_age")} />
+        </div>
+      ) : <p className="caption">아직 참여가 없습니다.</p>)}
+      {tab === "습관 진단" && (pick(habit, "empty") === false ? (
+        <div>
+          <p className="caption">참여 {num(pick(habit, "n"))}건 · 평균 {num(pick(habit, "avg"))}점</p>
+          <HBars items={asArray(pick(habit, "levels")).map((r) => [str(r["단계"]), num(r["참여"])] as [string, number])} />
+          <p className="caption" style={{ marginTop: 10 }}>영역별 평균 점수 — 낮은 영역을 노트·교육 주제로</p>
+          <DataTable rows={asArray(pick(habit, "dims"))} render={{ "평균 점수": (v) => <Bar v={num(v)} label={String(num(v))} /> }} />
+          <p className="caption" style={{ marginTop: 10 }}>연령대별 평균 점수</p>
+          <Generic value={pick(habit, "by_age")} />
+        </div>
+      ) : <p className="caption">아직 참여가 없습니다.</p>)}
+      {tab === "자가진단" && (pick(diag, "empty") === false ? (
+        <div>
+          <p className="caption">참여 {num(pick(diag, "n"))}건 · 평균 {num(pick(diag, "avg"))}점</p>
+          <DataTable rows={asArray(pick(diag, "areas"))} render={{ "평균 점수": (v) => <Bar v={num(v)} label={String(num(v))} /> }} />
+          <p className="caption" style={{ marginTop: 10 }}>가장 약한 영역 분포</p>
+          <DataTable rows={asArray(pick(diag, "weakest"))} />
+        </div>
+      ) : <p className="caption">아직 참여가 없습니다.</p>)}
       {tab === "일별 추이" && (daily.length ? (
         <div>
           <Bars rows={daily} labelKey={"날짜" in daily[0] ? "날짜" : "day"} series={dailySeries.length ? dailySeries : Object.keys(daily[0]).filter((k) => typeof daily[0][k] === "number")} />

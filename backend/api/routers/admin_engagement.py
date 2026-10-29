@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from api.deps import require_admin
 from api.routers.admin_jobs import log_action
-from app import ax_types, geo_map
+from app import ax_tests, ax_types, geo_map
 from pipeline import db, engage, settings_store
 
 router = APIRouter(prefix="/admin/engagement", tags=["admin-engagement"], dependencies=[Depends(require_admin)])
@@ -110,6 +110,98 @@ def _term_tab(df: pd.DataFrame) -> dict:
             "missed": [{"term": t, "n": n} for t, n in missed.most_common(12)]}
 
 
+# 참여 기록 종류 → 화면 이름 (새 종류가 생기면 여기에 없어도 '전체 현황'에 코드 그대로 나온다)
+KIND_LABELS = {
+    "type_test": "AX 리더 유형 테스트", "career": "AX 커리어 유형", "habit": "AI 활용 습관 진단", "term_quiz": "AI·AX 용어 퀴즈",
+    "diagnosis": "AX 준비도 자가진단", "quiz": "오늘의 퀴즈 응답", "poll": "예측 투표", "try_click": "홈 맛보기 클릭",
+    "ask": "AX 질문하기", "semantic": "의미 검색", "share": "결과 공유", "share_visit": "공유 링크로 유입",
+    "subscribe_open": "구독 창 열기", "subscribe": "구독 신청", "subscribe_confirm": "구독 확인 완료", "ref_visit": "추천 링크로 유입",
+    "member_request_open": "월 구독 신청 창 열기", "member_request": "월 구독 신청", "member_on": "월 구독 코드 등록",
+    "subscribe_try": "구독 시도(남용 제한 집계)", "confirm_try": "구독 확인 시도(남용 제한 집계)", "unsub_try": "해지 시도(남용 제한 집계)",
+    "contact_try": "문의 시도(남용 제한 집계)", "member_try": "월 구독 시도(남용 제한 집계)", "refer_try": "추천 현황 조회(남용 제한 집계)",
+}
+TRY_LABELS = {"quiz": "오늘의 퀴즈 1번 풀기", "tests_all": "AX 테스트 전체 보기", "lab": "키워드 추세 → 데이터 랩", "map": "참여 현황 → 참여 지도",
+              "ask": "질문하기 예시 질문"}
+ACCESS_LABELS = {"view": "페이지 보기", "note_view": "노트 상세 보기", "semantic": "의미 검색", "ask": "AX 질문하기", "confirm_mail": "구독 확인 메일 발송", "제한 기록": "남용 제한 기록"}
+
+
+def _all_tab(df: pd.DataFrame, days: int, with_sample: bool) -> dict:
+    """기록되는 모든 종류 — 기간 안 건수·방문자 수·오늘, 전체 누적 (참여 기록) + 서버 접속 기록(action 별)."""
+    today = engage.today().isoformat()
+    period = {k: (int(len(g)), int(g["visitor"].nunique()), int((g["day"] == today).sum())) for k, g in df.groupby("kind")} if not df.empty else {}
+    conn = engage._conn()
+    try:
+        cond = "" if with_sample else " WHERE visitor NOT LIKE ?"
+        total = dict(conn.execute(f"SELECT kind, COUNT(*) FROM engagements{cond} GROUP BY kind",
+                                  () if with_sample else (engage.SAMPLE + "%",)).fetchall())
+        since = (pd.Timestamp.now() - pd.Timedelta(days=days)).isoformat(timespec="seconds")
+        acc = conn.execute("SELECT action, COUNT(*), COUNT(DISTINCT ip) FROM access_logs WHERE created_at >= ? GROUP BY action ORDER BY 2 DESC",
+                           (since,)).fetchall()
+    finally:
+        conn.close()
+    kinds = sorted(set(period) | set(total), key=lambda k: (-period.get(k, (0,))[0], -total.get(k, 0)))
+    rows = [{"구분": KIND_LABELS.get(k, k), "코드": k, f"최근 {days}일": period.get(k, (0, 0, 0))[0], "방문자": period.get(k, (0, 0, 0))[1],
+             "오늘": period.get(k, (0, 0, 0))[2], "전체 누적": int(total.get(k, 0))} for k in kinds]
+    access = [{"구분": ACCESS_LABELS.get(a) or KIND_LABELS.get(a, a), "코드": a, f"최근 {days}일": int(n), "IP 수": int(ip)} for a, n, ip in acc]
+    return {"engagements": rows, "access": access}
+
+
+def _try_tab(df: pd.DataFrame) -> dict:
+    t = df[df["kind"] == "try_click"].copy()
+    if t.empty:
+        return {"empty": True}
+    names = {f"test:{kind}": f"테스트 카드 · {KIND_LABELS.get(kind, kind)}" for kind in KIND_LABELS}
+
+    def label(item: str) -> str:
+        return TRY_LABELS.get(item) or names.get(item) or item
+    by = t.groupby("item").agg(clicks=("visitor", "size"), visitors=("visitor", "nunique")).reset_index().sort_values("clicks", ascending=False)
+    daily = t.groupby("day").size().sort_index()
+    return {"empty": False,
+            "items": [{"맛보기": label(r["item"]), "클릭": int(r["clicks"]), "방문자": int(r["visitors"])} for r in by.to_dict("records")],
+            "daily": [{"날짜": d, "클릭": int(n)} for d, n in daily.items()]}
+
+
+def _habit_tab(df: pd.DataFrame) -> dict:
+    h = df[df["kind"] == "habit"].copy()
+    if h.empty:
+        return {"empty": True}
+    h["score"] = pd.to_numeric(h["value"], errors="coerce")
+    levels = h["item"].value_counts()
+    order = [n for _, _, n, _ in ax_tests.HABIT_LEVELS]
+    dims = pd.DataFrame([json.loads(x or "{}") for x in h["extra"]])
+    names = {k: n for k, n, _ in ax_tests.HABIT_DIMS}
+    return {"empty": False, "n": int(len(h)), "avg": round(float(h["score"].mean()), 1),
+            "levels": [{"단계": lv, "참여": int(levels.get(lv, 0))} for lv in order],
+            "dims": [{"영역": names.get(k, k), "평균 점수": round(float(dims[k].mean()), 1)} for k in names if k in dims],
+            "by_age": _table(h.pivot_table(index="age", values="score", aggfunc="mean").round(1))}
+
+
+def _career_tab(df: pd.DataFrame) -> dict:
+    c = df[df["kind"] == "career"].copy()
+    if c.empty:
+        return {"empty": True}
+    label = lambda k: f"{ax_tests.CAREER_TYPES[k][0]} {ax_tests.CAREER_TYPES[k][1]}" if k in ax_tests.CAREER_TYPES else k  # noqa: E731
+    c["유형"] = c["item"].map(label)
+    c["2순위"] = c["value"].map(label)
+    first, second = c["유형"].value_counts(), c["2순위"].value_counts()
+    order = sorted(set(first.index) | set(second.index), key=lambda k: (-int(first.get(k, 0)), -int(second.get(k, 0))))
+    return {"empty": False, "n": int(len(c)),
+            "types": [{"유형": k, "1순위": int(first.get(k, 0)), "2순위": int(second.get(k, 0))} for k in order],
+            "by_age": _table(pd.crosstab(c["유형"], c["age"], normalize="columns").mul(100).round(1))}
+
+
+def _diag_tab(df: pd.DataFrame) -> dict:
+    d = df[df["kind"] == "diagnosis"].copy()
+    if d.empty:
+        return {"empty": True}
+    d["score"] = pd.to_numeric(d["value"], errors="coerce")
+    weak = d["item"].value_counts()
+    areas = pd.DataFrame([json.loads(x or "{}") for x in d["extra"]])
+    return {"empty": False, "n": int(len(d)), "avg": round(float(d["score"].mean()), 1),
+            "weakest": [{"가장 약한 영역": k, "참여": int(v)} for k, v in weak.items()],
+            "areas": [{"영역": k, "평균 점수": round(float(areas[k].mean()), 1)} for k in areas.columns]}
+
+
 def _poll_tab(df: pd.DataFrame) -> list[dict]:
     out = []
     for d in sorted(set(df.loc[df["kind"] == "poll", "item"]), reverse=True):
@@ -137,7 +229,11 @@ def engagement(days: int = 14, sample: int = 0) -> dict:
         "sample": {"count": engage.sample_count(), "on_map": settings_store.load()["engage"]["sample_on_map"]},
         "summary": {"visitors": int(df["visitor"].nunique()), "retention": ret, "type_test": kinds["type_test"],
                     "quiz": kinds["quiz"], "term_quiz": kinds["term_quiz"], "poll": kinds["poll"],
-                    "share": kinds["share"], "share_visit": kinds["share_visit"], "subscribe": kinds["subscribe"]},
+                    "share": kinds["share"], "share_visit": kinds["share_visit"], "subscribe": kinds["subscribe"],
+                    "career": kinds["career"], "habit": kinds["habit"], "diagnosis": kinds["diagnosis"], "try_click": kinds["try_click"],
+                    "ask": kinds["ask"]},
+        "all": _cached(("all", days, with_sample), lambda: _all_tab(df, days, with_sample)),
+        "try": _try_tab(df), "habit": _habit_tab(df), "career": _career_tab(df), "diag": _diag_tab(df),
         "daily": _cached(("daily", days), lambda: engage.daily_activity(days)),
         "funnel": _cached(("funnel", days), lambda: engage.funnel_by_source(days)),
         "type": _type_tab(df), "quiz": _quiz_tab(df), "term": _term_tab(df), "poll": _poll_tab(df),
