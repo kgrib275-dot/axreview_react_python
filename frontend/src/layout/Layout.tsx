@@ -48,8 +48,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <>
       <header className="hdr">
         <div className="container hdr-in">
-          {/* (N) = React·FastAPI 새 버전 표시 — Streamlit 판과 구분 */}
-          <Link to="/" className="logo notranslate" translate="no" aria-label="AX Review (새 버전)"><img className="logo-dk" src="/logo.svg" alt="" height={26} /><img className="logo-lt" src="/logo-light.svg" alt="" height={26} /><span className="ver">(N)</span></Link>
+          <Link to="/" className="logo notranslate" translate="no" aria-label="AX Review"><img className="logo-dk" src="/logo.svg" alt="" height={26} /><img className="logo-lt" src="/logo-light.svg" alt="" height={26} /></Link>
           <button className="btn sm burger" aria-label="메뉴" onClick={() => setOpen((o) => !o)}>☰ 메뉴</button>
           <nav className={`nav ${open ? "open" : ""}`}>
             {NAV.map(([to, label]) => (

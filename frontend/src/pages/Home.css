@@ -143,7 +143,7 @@ a.try-tile:hover{border-color:var(--accent);transform:translateY(-2px)}
 .try-test:hover{background:var(--surface-2)}
 .try-test i{font-style:normal;font-size:1.2rem;text-align:center}
 .try-test b{display:block;font-size:.9rem}.try-test small{display:block;font-size:.76rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.try-test em{font-style:normal;font-size:.74rem;color:var(--accent-2);white-space:nowrap}
+.try-test em{font-style:normal;font-size:.74rem;color:var(--accent-2);white-space:nowrap;max-width:6.5em;overflow:hidden;text-overflow:ellipsis}
 .spark-row{display:grid;grid-template-columns:1fr 90px 2.4em;gap:8px;align-items:center;font-size:.86rem}
 .spark-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.spark-row b{text-align:right}
 .spark{color:var(--accent-2)}
