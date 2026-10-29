@@ -78,7 +78,9 @@ async def _guard(request: Request, call_next):
     if request.method not in _SAFE_METHODS and request.url.path.startswith("/api/"):
         site = request.headers.get("sec-fetch-site", "")
         if request.headers.get("x-requested-with") != "axreview" or site not in ("", "same-origin", "none"):
-            return JSONResponse({"detail": "허용되지 않은 요청입니다. 화면을 새로고침한 뒤 다시 시도해 주세요."}, status_code=403)
+            # 403 이 아니라 428 — 관리 화면은 403 을 '관리자 아님'으로 보고 토큰 입력 화면으로 넘어가 버려서,
+            # 이 헤더가 없는 예전 화면(배포 전에 열어 둔 탭)에서는 저장이 조용히 안 되는 것처럼 보였다 (2026-10-29).
+            return JSONResponse({"detail": "화면이 예전 버전입니다. 새로고침(F5)한 뒤 다시 시도해 주세요."}, status_code=428)
     response = await call_next(request)
     for k, v in _SECURITY_HEADERS.items():
         response.headers.setdefault(k, v)

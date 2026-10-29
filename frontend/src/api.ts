@@ -38,6 +38,12 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
   } catch {
     /* 그대로 둔다 */
   }
+  if (res.status === 428) {
+    // 서버가 새 버전으로 바뀌었는데 이 탭은 예전 화면 — 한 번만 자동 새로고침 (무한 반복 방지)
+    try {
+      if (!sessionStorage.getItem("ax_reloaded")) { sessionStorage.setItem("ax_reloaded", "1"); window.location.reload(); }
+    } catch { /* 저장소를 못 쓰면 안내 문구만 */ }
+  }
   if (!res.ok) {
     const raw = data && typeof data === "object" ? (data as Record<string, unknown>).detail : undefined;
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {

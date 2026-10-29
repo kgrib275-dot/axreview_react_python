@@ -49,7 +49,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <header className="hdr">
         <div className="container hdr-in">
           {/* (N) = React·FastAPI 새 버전 표시 — Streamlit 판과 구분 */}
-          <Link to="/" className="logo" aria-label="AX Review (새 버전)"><img className="logo-dk" src="/logo.svg" alt="" height={26} /><img className="logo-lt" src="/logo-light.svg" alt="" height={26} /><span className="ver">(N)</span></Link>
+          <Link to="/" className="logo notranslate" translate="no" aria-label="AX Review (새 버전)"><img className="logo-dk" src="/logo.svg" alt="" height={26} /><img className="logo-lt" src="/logo-light.svg" alt="" height={26} /><span className="ver">(N)</span></Link>
           <button className="btn sm burger" aria-label="메뉴" onClick={() => setOpen((o) => !o)}>☰ 메뉴</button>
           <nav className={`nav ${open ? "open" : ""}`}>
             {NAV.map(([to, label]) => (
@@ -72,8 +72,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="container page">{children}</div>
       </main>
       <Footer />
-      <a className="fab fab-ask" href="/ask" title="AX 질문하기">✦</a>
-      <button className="fab fab-top" title="맨 위로" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>↑</button>
+      <a className="fab fab-ask notranslate" translate="no" href="/ask" title="AX 질문하기">✦</a>
+      <button className="fab fab-top notranslate" translate="no" title="맨 위로" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>↑</button>
       {!isAdminArea && !state.subscribed && (!me?.is_admin || params.get("nudge") === "1") && <Nudge onSubscribe={() => openSubscribe("sticky_bar")} />}
     </>
   );

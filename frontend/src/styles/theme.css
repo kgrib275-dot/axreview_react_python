@@ -213,7 +213,16 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)}
 #ax-nudge .t{line-height:1.4}#ax-nudge .t small{display:block;color:#8C9BB5;font-size:.76rem}
 #ax-nudge .go{all:unset;cursor:pointer;white-space:nowrap;padding:9px 16px;border-radius:999px;font-weight:700;font-size:.86rem;background:linear-gradient(135deg,#0A6FD6,#2E9BEA);color:#fff}
 #ax-nudge .x{all:unset;cursor:pointer;color:#8C9BB5;padding:4px 8px;font-size:1.1rem}
-@media (max-width:520px){#ax-nudge{bottom:84px;gap:8px;font-size:.82rem}#ax-nudge .t small{display:none}}
+/* 오른쪽 아래 둥근 버튼(✦·↑, 폭 48px + 여백 22px) 자리를 비워 둔다 — 가운데 정렬이면 좁은 화면에서 닫기(×)가 그 밑에 깔려 누를 수 없었다 */
+@media (max-width:900px){#ax-nudge{left:16px;right:84px;width:auto;max-width:none;transform:translateY(140%)}#ax-nudge.show{transform:none}}
+@media (max-width:520px){#ax-nudge{gap:8px;font-size:.82rem;padding:10px 6px 10px 12px}#ax-nudge .t small{display:none}}
+#ax-nudge .x{min-width:36px;min-height:36px;display:grid;place-items:center;text-align:center}  /* 손가락으로 누르기 쉬운 크기 */
+
+/* Google 번역 위젯(KO/EN) — 기본 배너·말풍선·강조를 숨기고 화면이 밀리지 않게 */
+.goog-te-banner-frame,iframe.skiptranslate,.goog-te-balloon-frame,#goog-gt-tt,.goog-te-gadget,
+.VIpgJd-ZVi9od-ORHb-OEVmcd,.VIpgJd-ZVi9od-aZ2wEe-wOHMyf,.VIpgJd-yAWNEb-L7lbkb{display:none!important}
+body{top:0!important}
+font[style]{background:none!important;box-shadow:none!important}
 
 /* 공유 바 */
 .nt-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 4px}
