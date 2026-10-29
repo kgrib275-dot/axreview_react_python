@@ -18,6 +18,7 @@ const PAGES: { path: string; label: string; grp?: string; C: React.LazyExoticCom
   { path: "search", label: "의미 검색·질문하기", C: L(() => import("./Search")) },
   { path: "collect", label: "수집 설정", grp: "설정", C: L(() => import("./Collect")) },
   { path: "schedule", label: "배치 스케줄", C: L(() => import("./Schedule")) },
+  { path: "llm", label: "AI 모델 설정", C: L(() => import("./Llm")) },
   { path: "ops", label: "운영 점검", grp: "운영 현황", C: L(() => import("./Ops")) },
   { path: "engagement", label: "참여 분석", C: L(() => import("./Engagement")) },
   { path: "warehouse", label: "Databricks 적재", C: L(() => import("./Warehouse")) },

@@ -7,7 +7,7 @@ const WD = ["월", "화", "수", "목", "금", "토", "일"];
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 type Def = { key: string; title: string; desc: string; weekly?: boolean; extra?: "draft" | "auto" };
 const LEFT: Def[] = [
-  { key: "collection", title: "1. 수집", desc: "활성 소스 수집 → 중복 제거 → 키워드 필터 → Gemini 채점" },
+  { key: "collection", title: "1. 수집", desc: "활성 소스 수집 → 중복 제거 → 키워드 필터 → AI 채점 (관리 > AI 모델 설정)" },
   { key: "drafting", title: "2. 노트 초안 생성", desc: "점수 높은 대기 기사의 원문을 읽고 초안을 씁니다. 수집 30분 뒤 정도가 적당합니다.", extra: "draft" },
   { key: "vectorize", title: "5. 벡터화", desc: "새 게시 노트·기사를 임베딩해 의미 검색과 'AX 질문하기'에 반영합니다. 수집·초안 뒤로 잡으세요." },
 ];
@@ -31,7 +31,8 @@ function Section({ d, c, onSave }: { d: Def; c: Row; onSave: (key: string, value
     setPerRun(num(c.per_run, 5)); setMinScore(num(c.min_score, 3)); setAutoPub(bool(c.auto_publish));
   }, [c]);
   const save = () => {
-    const vals: Row = { ...c, enabled };
+    const { title: _t, desc: _d, ...base } = c;  // 화면용 제목·설명은 보내지 않는다
+    const vals: Row = { ...base, enabled };
     if (d.weekly) {
       if (!TIME_RE.test(time.trim())) return setErr("시각은 HH:MM 형식이어야 합니다.");
       vals.weekday = weekday; vals.time = time.trim();
@@ -76,7 +77,10 @@ function Section({ d, c, onSave }: { d: Def; c: Row; onSave: (key: string, value
 export default function Schedule() {
   const { data, error, reload } = useLoad(() => A.get<Row>("schedule"), []);
   const act = useAct();
-  const cfg = data && isObj(data.schedule) ? (data.schedule as Row) : data || {};
+  // 서버는 {daily: {collection, drafting, vectorize}, weekly: {weekly, newsletter, teams}} 로 보낸다.
+  // 예전엔 묶음을 풀지 않고 cfg.collection 을 찾아 늘 빈 값으로 보였다 → 저장 뒤 다시 불러오면 빈 칸, 빈 칸으로 저장하면 원래 값이 지워졌다 (2026-10-29)
+  const cfg: Row = data ? { ...(isObj(data.daily) ? (data.daily as Row) : {}), ...(isObj(data.weekly) ? (data.weekly as Row) : {}),
+    ...(isObj(data.schedule) ? (data.schedule as Row) : {}) } : {};
   const sec = (k: string) => (isObj(cfg[k]) ? (cfg[k] as Row) : {});
   const save = async (key: string, values: Row) => {
     await act(() => A.put("schedule", { [key]: values }), `${[...LEFT, ...RIGHT].find((d) => d.key === key)?.title} 스케줄을 저장했습니다.`);

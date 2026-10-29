@@ -14,7 +14,7 @@ router = APIRouter(prefix="/admin/schedule", tags=["admin-schedule"], dependenci
 DAILY = {"collection": "1. 수집", "drafting": "2. 노트 초안 생성", "vectorize": "5. 벡터화"}
 WEEKLY = {"weekly": "3. 주간 흐름", "newsletter": "4. 뉴스레터 발송", "teams": "6. Teams 발송"}
 _DESC = {
-    "collection": "활성 소스 수집 → 중복 제거 → 키워드 필터 → Gemini 채점",
+    "collection": "활성 소스 수집 → 중복 제거 → 키워드 필터 → AI 채점 (관리 > AI 모델 설정)",
     "drafting": "점수 높은 대기 기사의 원문을 읽고 초안을 씁니다. 수집 30분 뒤 정도가 적당합니다.",
     "vectorize": "새 게시 노트·기사를 임베딩해 의미 검색과 'AX 질문하기'에 반영합니다. 수집·초안 뒤로 잡으세요.",
     "weekly": "지난주(월~일) 게시 노트로 '이번 주 AX 흐름'을 씁니다.",

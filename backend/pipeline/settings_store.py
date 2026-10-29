@@ -38,6 +38,8 @@ DEFAULTS = {
              "focus": ["에이전트", "보안", "거버넌스", "데이터", "비용", "온톨로지"],
              "industries": ["제조", "금융", "고객센터", "IT 서비스"], "audience": "현업 리더"},
     "admin_ips": [],
+    # AI 모델 (관리 > AI 모델 설정) — provider: gemini|claude. Claude 키는 data/llm_keys.json (pipeline/claude_llm.py)
+    "llm": {"provider": "gemini", "claude_model": "claude-opus-5-5"},
     "warehouse": {"auto_sync": True},
     "engage": {"sample_on_map": True},  # 공개 참여 지도에 예시(가상) 데이터를 함께 보여 줄지 (배지로 표시)  # Databricks 설정이 있으면 수집·초안·주간 흐름·발송 뒤 자동 적재
 }

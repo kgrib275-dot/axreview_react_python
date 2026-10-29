@@ -6,14 +6,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
 import typing
 from datetime import datetime
 
-from . import db, gemini_keys, industry, vectorizer
+from . import claude_llm, db, gemini_keys, industry, vectorizer
 from .llm import CATEGORIES
+
+log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gemini-2.5-flash"
 QUOTA_MESSAGE = "오늘 사용할 수 있는 AI 호출 한도를 모두 썼습니다. 내일 다시 시도해 주세요."
@@ -49,7 +52,16 @@ MIN_SIMILARITY = 0.65
 
 
 def has_api_keys() -> bool:
-    return bool(gemini_keys.all_keys())
+    return bool(gemini_keys.all_keys()) or claude_llm.provider() == "claude"
+
+
+def _claude(system: str, history: list[dict], message: str, funcs=None, web_search: bool = False) -> str:
+    """관리 > AI 모델 설정에서 Claude 를 골랐을 때의 질문하기. 실패하면 TEMP_MESSAGE → 호출부가 근거 목록으로 대신 답한다."""
+    try:
+        return claude_llm.chat(system, history, message, funcs=funcs, web_search=web_search) or TEMP_MESSAGE
+    except claude_llm.ClaudeError as e:
+        log.warning("Claude 질문하기 실패: %s", e)
+        return TEMP_MESSAGE
 
 
 def retrieve(question: str) -> tuple[list[dict], list[dict]]:
@@ -232,10 +244,14 @@ def ask(history: list[dict], message: str, context: str = "") -> str:
                "짐작하지 말고 함수를 호출해 정확한 값으로 답하라. 상대적 날짜는 오늘 기준으로 계산해 넘겨라. "
                f"노트 카테고리는 {', '.join(CATEGORIES)}이다.")
     system += _WITH_CONTEXT + context if context else _NO_CONTEXT
+    if claude_llm.provider() == "claude":
+        return _claude(system, history, message, funcs=TOOLS)
     return _send(system, history, message, tools=TOOLS)
 
 
 def ask_with_web_search(history: list[dict], message: str) -> str:
+    if claude_llm.provider() == "claude":
+        return _claude(_BASE + _WEB.replace("구글 검색", "웹 검색"), history, message, web_search=True)
     from google.genai import types
     return _send(_BASE + _WEB, history, message, tools=[types.Tool(google_search=types.GoogleSearch())])
 
@@ -252,12 +268,20 @@ _SPOTLIGHT_PROMPT = """너는 AX Review 에디터다. 아래는 오늘 AX 관련
 
 def synthesize_spotlight(items: list[dict]) -> dict[str, str]:
     """데일리 브리핑용 AI 종합 (AI_NEWS와 동일). 실패하면 빈 dict — 호출부는 원래 요약을 쓴다."""
-    if not items or not gemini_keys.all_keys():
+    if not items or not has_api_keys():
         return {}
     model = _model()
     prompt = _SPOTLIGHT_PROMPT.format(n=len(items), articles_json=json.dumps(
         [{"url": it["url"], "title": it["title"], "summary": it.get("summary") or ""} for it in items],
         ensure_ascii=False))
+    if claude_llm.provider() == "claude":
+        try:
+            raw = claude_llm.generate(prompt, json_mode=True)
+            match = re.search(r"\[.*\]", raw, re.DOTALL)
+            return {r["url"]: r.get("brief", "") for r in json.loads(match.group(0) if match else raw) if r.get("url")}
+        except (claude_llm.ClaudeError, ValueError, TypeError, KeyError) as e:
+            log.warning("Claude 브리핑 종합 실패: %s", e)
+            return {}
     for key in gemini_keys.healthy_keys(model):
         client = gemini_keys.client(key)
         try:

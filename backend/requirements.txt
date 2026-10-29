@@ -13,3 +13,4 @@ databricks-sql-connector==4.6.0  # Databricks 적재 (Trade_IQ와 같은 버전)
 thrift==0.24.0
 numpy>=2,<3  # 지식 지도·관련 노트 (pipeline/knowledge.py)
 dnspython==2.7.0  # 구독 이메일 도메인 확인 (pipeline/email_check.py)
+anthropic==2.3.0  # Claude (관리 > AI 모델 설정에서 고르면 Gemini 대신 — pipeline/claude_llm.py)

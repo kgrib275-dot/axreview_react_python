@@ -59,7 +59,29 @@ class GeminiKeyPool:
         raise AllKeysExhausted(f"no usable Gemini key for {model}") from last_exc
 
 
-def pool_from_env() -> GeminiKeyPool | None:
+class ClaudePool:
+    """GeminiKeyPool 과 같은 모양(generate·workers)으로 Claude 를 부른다 — 채점·노트 초안·주간 흐름 코드를 그대로 쓰려고.
+    model 인자(Gemini 모델 이름)는 무시하고 관리 화면에서 고른 Claude 모델을 쓴다.
+    thinking_budget=0(채점처럼 단순한 일) → effort low."""
+
+    def workers(self, model: str, cap: int = 5) -> int:
+        return min(cap, 3)  # Claude 는 키 하나 — 동시 요청은 조금만
+
+    def generate(self, model: str, prompt: str, json_mode: bool = False, rounds: int = 3,
+                 backoff_seconds: float = 20.0, thinking_budget: int | None = None) -> str:
+        from . import claude_llm
+        try:
+            return claude_llm.generate(prompt, json_mode=json_mode, effort="low" if thinking_budget == 0 else "medium")
+        except claude_llm.ClaudeError as e:
+            log.warning("Claude 호출 실패: %s", e)
+            raise AllKeysExhausted(str(e)) from e
+
+
+def pool_from_env() -> GeminiKeyPool | ClaudePool | None:
+    """관리 > AI 모델 설정에서 Claude 를 골랐고 키가 있으면 Claude, 아니면 Gemini 키 풀."""
+    from . import claude_llm
+    if claude_llm.provider() == "claude":
+        return ClaudePool()
     keys = [k.strip() for k in os.environ.get("GEMINI_API_KEYS", "").split(",") if k.strip()]
     return GeminiKeyPool(keys) if keys else None
 
