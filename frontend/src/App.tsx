@@ -1,6 +1,7 @@
 // 라우트 목록 — 페이지 파일은 각 담당이 만든다. 경로는 Streamlit 판과 같게 유지한다 (공유 링크·sitemap 호환).
-import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Route, Routes, useLocation } from "react-router-dom";
+import { track } from "./api";
 import Layout from "./layout/Layout";
 import { MeProvider } from "./me";
 
@@ -24,9 +25,17 @@ const Privacy = L(() => import("./pages/Privacy"));
 const Admin = L(() => import("./pages/admin/AdminApp"));
 const NotFound = L(() => import("./pages/NotFound"));
 
+/** 화면 이동 기록 (방문 패턴 분석) — 경로만 보낸다. 쿼리(확인·연결 토큰 등)는 보내지 않고, 관리 화면·관리자 이동은 서버가 버린다. */
+function PageView() {
+  const { pathname } = useLocation();
+  useEffect(() => { if (!pathname.startsWith("/admin")) track("page_view", pathname); }, [pathname]);
+  return null;
+}
+
 export default function App() {
   return (
     <MeProvider>
+      <PageView />
       <Layout>
         <Suspense fallback={<div className="page-loading">불러오는 중…</div>}>
           <Routes>

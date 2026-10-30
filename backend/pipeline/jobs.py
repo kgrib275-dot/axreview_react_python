@@ -294,10 +294,12 @@ def newsletter(trigger: str = "수동", only_to: str | None = None) -> dict:
     by_token = {s["token"]: s for s in ([] if only_to else subs)}
     log.info("메일 발송 시작: %d명 · %s", len(recipients), subject)
     pdf = latest_report_url()
+    shared = mailer.prepare(issue, notes, pdf, send_key=send_key)  # 퀴즈·투표·용어 블록은 호마다 한 번 (수신자 전원 같은 문제)
     ok, failed = mailer.send(
         recipients, subject,
-        lambda token: mailer.build_html(issue, notes, token, pdf, industries=industry.parse((by_token.get(token) or {}).get("industries")),
-                                        refer_key=(by_token.get(token) or {}).get("ref_key") or ""),
+        lambda token: mailer.render(shared, token, industries=industry.parse((by_token.get(token) or {}).get("industries")),
+                                    refer_key=(by_token.get(token) or {}).get("ref_key") or "",
+                                    visitor=(by_token.get(token) or {}).get("visitor") or ""),  # 이어진 브라우저가 있어야 개인 블록
         claim=None if only_to else (lambda e: db.claim_send(send_key, hash_of(e))),
         release=None if only_to else (lambda e: db.release_send(send_key, hash_of(e))))
     if not only_to:

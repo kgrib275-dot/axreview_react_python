@@ -97,6 +97,15 @@ def questions(track: str, n: int = 10, seed: str | int | None = None) -> list[di
     return out
 
 
+TERM_N = 10  # 한 세트 문항 수 (/api/terms)
+
+
+def quiz_set(track: str, seed: str) -> list[dict]:
+    """seed(8~32자리 hex)로 정해지는 10문항 세트 — 화면(/api/terms)과 뉴스레터가 같은 문제를 다시 만들 때 쓴다.
+    시드 문자열 형식을 바꾸면 이미 나간 메일의 용어 문제가 달라지므로 바꾸지 않는다."""
+    return questions(track, TERM_N, seed=f"terms:{track}:{seed}")
+
+
 def term_of_day(day_iso: str) -> tuple[str, tuple[str, str, str]]:
     """날짜마다 바뀌는 '오늘의 용어' (트랙, 용어)."""
     rng = random.Random(f"term:{day_iso}")

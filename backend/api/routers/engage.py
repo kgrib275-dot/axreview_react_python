@@ -7,6 +7,8 @@ Streamlit 판 app/play_ui.py(share·track_share_visit·profile_form), streamlit_
 """
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Body, HTTPException
 
 from api.deps import Caller, CallerDep
@@ -15,7 +17,10 @@ from pipeline import engage, referral
 router = APIRouter(tags=["engage"])
 
 # 화면이 직접 남길 수 있는 종류 — 그 밖의 kind 는 거부한다 (통계를 오염시키지 못하게)
-KINDS = {"share", "share_visit", "subscribe_open", "ref_visit", "member_request_open", "try_click"}  # try_click: 홈 맛보기 클릭 (어느 것이 잘 먹히는지)
+KINDS = {"share", "share_visit", "subscribe_open", "ref_visit", "member_request_open", "try_click",  # try_click: 홈 맛보기 클릭 (어느 것이 잘 먹히는지)
+         "page_view"}  # page_view: 화면 이동 — 방문 시간대·이동 경로·재방문 패턴 분석용 (관리 > 참여 분석 > 방문 패턴)
+# page_view 의 경로는 사이트 안 경로만, 쿼리(?t= 확인 토큰·?link= 연결 토큰·?k= 추천 열쇠 등)는 버린다 — 토큰이 기록에 남지 않게
+_PATH_RE = re.compile(r"^/[A-Za-z0-9/_-]{0,60}$")
 CONTENTS = {"today", "type_test", "terms", "diagnosis", "notes", "note_detail", "lab", "letter", "refer", "about",
             "home_hero", "home_cta", "header", "sticky_bar"}
 
@@ -33,7 +38,14 @@ def record(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     extra = payload.get("extra")
     if extra is not None and not isinstance(extra, dict):
         extra = None
-    if kind == "ref_visit":  # 추천 링크(?ref=)로 온 방문 — 코드 형식이 맞을 때만
+    if kind == "page_view":
+        if c.is_admin:
+            return {"ok": True}  # 관리자 자신의 이동은 방문 패턴을 흐리므로 남기지 않는다
+        item = item.split("?", 1)[0].split("#", 1)[0].rstrip("/") or "/"
+        if not _PATH_RE.match(item) or item.startswith("/admin"):
+            return {"ok": True}
+        value, extra = "", None  # 경로 외에는 받지 않는다
+    elif kind == "ref_visit":  # 추천 링크(?ref=)로 온 방문 — 코드 형식이 맞을 때만
         if not referral.valid_code(item):
             raise HTTPException(status_code=400, detail="추천 코드 형식이 아닙니다.")
         if any(r["item"] == item for r in engage.mine("ref_visit", c.visitor)):

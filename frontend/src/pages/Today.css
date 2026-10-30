@@ -28,3 +28,9 @@
   .qopt{grid-template-columns:minmax(0,1fr) 5em 3em}
   .tod{flex-wrap:wrap}.tod em{margin-left:0}
 }
+/* 메일 링크(?mq= · ?mp=)로 온 선택 — 고른 보기를 미리 표시하고, 제출은 확인 줄의 버튼으로만 */
+.mail-focus{outline:2px solid rgba(46,155,234,.55);outline-offset:4px;border-radius:16px}
+.btn.opt.mail-pick{border-color:var(--accent-deep);background:rgba(10,111,214,.16);box-shadow:0 0 0 2px rgba(46,155,234,.35) inset;font-weight:700}
+.mail-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:12px;padding:10px 14px;border-radius:12px;
+  border:1px solid rgba(46,155,234,.45);background:rgba(10,111,214,.08);font-size:.95rem;color:var(--ink-2)}
+.mail-bar b{color:var(--ink)}

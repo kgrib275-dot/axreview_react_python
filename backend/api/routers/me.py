@@ -27,7 +27,7 @@ STATE_KEYS = {"axt_step", "axt_answers", "axt_recorded",  # 유형 테스트 진
               "term_track", "term_i", "term_picks", "term_qs", "term_seen", "term_recorded",  # 용어 퀴즈 진행
               "member_id",  # 월 구독 (다음 방문에 코드를 다시 넣지 않게, 유효성은 매번 다시 확인)
               "car_picks", "hab_answers",  # AX 커리어 유형·AI 활용 습관 진단 진행 (다른 페이지에 다녀와도 이어서)
-              "subscribed", "pref_inds", "diag_weak"}  # 구독 신청 여부(안내 띠 숨김)·고른 업종·자가진단 약한 영역 (개인화)
+              "subscribed", "sub_pending", "pref_inds", "diag_weak"}  # 구독 완료·확인 대기(신청한 주소)·고른 업종·자가진단 약한 영역 (개인화)
 MAX_BYTES = 200_000
 
 _SQL = "CREATE TABLE IF NOT EXISTS visitor_state (visitor TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL)"

@@ -1,14 +1,14 @@
 // 수집 기사 — 기간·상태·최소 점수·검색 필터, 행 선택 → 초안 생성 / 건너뛰기 / 대기로 되돌리기 (app_pages/admin/articles.py).
 import { useMemo, useState } from "react";
 import { Alert, useLoad } from "../../components/ui";
-import { A, AdminHead, Bar, DataTable, Row, asArray, num, pick, qs, str, useAct } from "./common";
+import { A, AdminHead, Bar, DataTable, Row, asArray, num, pick, qs, str, useAct, useRemembered } from "./common";
 import { JobStatus, useJobs } from "./JobRunner";
 
 const STATUS_LABEL: Record<string, string> = { new: "대기", drafted: "초안됨", skipped: "건너뜀" };
 const hashOf = (a: Row) => str(pick(a, "url_hash", "hash", "id"));
 
 export default function Articles() {
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useRemembered<number>("days", 7);
   const [status, setStatus] = useState<string[]>(["new"]);
   const [minScore, setMinScore] = useState(3);
   const [q, setQ] = useState("");

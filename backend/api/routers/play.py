@@ -22,7 +22,7 @@ from pipeline import db, engage
 
 router = APIRouter(tags=["play"])
 
-TERM_N = 10
+TERM_N = G.TERM_N
 _SEED_RE = re.compile(r"^[0-9a-f]{8,32}$")
 
 
@@ -105,7 +105,7 @@ def type_result(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
 # ───────────────────────── AI·AX 용어 퀴즈 ─────────────────────────
 
 def _questions(track: str, seed: str) -> list[dict]:
-    return G.questions(track, TERM_N, seed=f"terms:{track}:{seed}")
+    return G.quiz_set(track, seed)  # 뉴스레터 '용어 1개 맞히기'도 같은 세트의 0번 문항을 낸다 (pipeline/mailer.py)
 
 
 def _track(v) -> str:

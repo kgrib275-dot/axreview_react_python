@@ -34,12 +34,13 @@ CONFIRM_MAIL_GAP_MIN = 10   # 같은 주소로 확인 메일은 10분에 한 번
 CONFIRM_MAIL_PER_DAY = 3    # 하루 3번까지 — 남의 주소로 신청을 반복해 메일 폭탄을 보내지 못하게
 
 
-def _may_mail(email: str) -> bool:
+def _may_mail(email: str, action: str = "confirm_mail", page: str = "구독 확인 메일") -> bool:
+    """같은 주소로 보내는 메일 제한 (확인 메일, 질문하기 연결 메일 — api/routers/ask.py 도 action 을 달리해 쓴다)."""
     key = hashlib.sha256(email.lower().encode()).hexdigest()[:24]  # 주소 자체는 접속 기록에 남기지 않는다
-    if (db.access_count_detail_since("confirm_mail", key, CONFIRM_MAIL_GAP_MIN)
-            or db.access_count_detail_since("confirm_mail", key, 24 * 60) >= CONFIRM_MAIL_PER_DAY):
+    if (db.access_count_detail_since(action, key, CONFIRM_MAIL_GAP_MIN)
+            or db.access_count_detail_since(action, key, 24 * 60) >= CONFIRM_MAIL_PER_DAY):
         return False
-    db.record_access(None, "구독 확인 메일", "confirm_mail", key)
+    db.record_access(None, page, action, key)
     return True
 
 
@@ -66,7 +67,7 @@ def subscribe(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
         if mailer.is_configured() and _may_mail(email):
             mailer.send_confirmation(email, token)  # 실패하면 관리 > 구독·발송에서 다시 보낼 수 있다
     # 이미 구독 중이어도 같은 응답 — 존재 여부 비노출
-    me_state.save_state(c.visitor, {"subscribed": True, "pref_inds": inds})  # 노트 업종 필터 기본값 (개인화)
+    me_state.save_state(c.visitor, {"sub_pending": True, "pref_inds": inds})  # 확인 대기 — 완료(subscribed)는 confirm 에서 (개인화: 노트 업종 필터 기본값)
     reward = f"구독 후 메일 하단의 내 추천 링크로 친구 {referral.REWARD_AT}명이 구독하면 지난 호 주간 PDF 전체를 열어 드립니다."
     if mailer.is_configured():
         msg = f"{email} 으로 확인 메일을 보냈습니다. 메일의 '구독 확인하기'를 눌러야 구독이 완료됩니다. 메일이 안 보이면 스팸함도 확인해 주세요. " + reward
@@ -81,10 +82,12 @@ def confirm(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     if not isinstance(t, str) or not _TOKEN_RE.match(t):
         raise HTTPException(status_code=400, detail="확인 메일의 '구독 확인하기' 링크로 들어와 주세요.")
     throttle("confirm_try", c, per_visitor=10, per_ip=30)
-    if not db.confirm_subscription(t):
+    email = db.confirm_subscription(t)
+    if not email:
         raise HTTPException(status_code=400, detail="링크가 만료됐거나 이미 확인된 신청입니다. 구독 창에서 다시 신청해 주세요.")
     engage.record("subscribe_confirm", visitor=c.visitor)
-    me_state.save_state(c.visitor, {"subscribed": True})
+    db.link_subscriber_visitor(c.visitor, email=email)  # 확인한 브라우저 = 구독자 → 다음 메일부터 개인 블록(연속 참여·지난 예측·내 유형)
+    me_state.save_state(c.visitor, {"subscribed": True, "sub_pending": None})
     return {"ok": True, "message": "구독이 완료됐습니다. 다음 호부터 매주 월요일에 보내 드릴게요."}
 
 

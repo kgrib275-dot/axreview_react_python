@@ -139,6 +139,8 @@ for mod in pkgutil.iter_modules(_routers_pkg.__path__):
     m = importlib.import_module(f"api.routers.{mod.name}")
     if hasattr(m, "router"):
         app.include_router(m.router, prefix="/api")
+    if hasattr(m, "root_router"):  # 접두어 없는 공개 경로 (메일 링크 /m/… — api/routers/mail_link.py)
+        app.include_router(m.root_router)
 
 # 2) 검색·공유·PDF 서버 렌더링 페이지
 from app import web  # noqa: E402

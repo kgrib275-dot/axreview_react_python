@@ -1,6 +1,7 @@
 /* 관리 화면 전용 스타일 — 사이드바 + 본문, 작업 로그 터미널, 작은 표/막대 */
 .adm{display:grid;grid-template-columns:200px 1fr;gap:22px;align-items:start;padding-top:18px;padding-bottom:40px}
-.adm-side{position:sticky;top:72px;display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);border-radius:14px;padding:8px;background:var(--surface)}
+.adm-side{position:sticky;top:72px;max-height:calc(100vh - 88px);overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);border-radius:14px;padding:8px;background:var(--surface)}  /* 화면보다 길면 메뉴 안에서만 스크롤 (2026-10-30: 아래 항목이 안 보였다) */
+.adm-side::-webkit-scrollbar{width:6px}.adm-side::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .adm-side a{text-decoration:none;color:var(--ink-2);padding:7px 10px;border-radius:8px;font-size:.95rem;white-space:nowrap}
 .adm-side a.on,.adm-side a:hover{color:var(--ink);background:rgba(46,155,234,.14)}
 /* 메뉴 접기 — 그룹 머리글은 버튼, 전체 접기 버튼은 맨 위 (2026-10-30: 메뉴 16개가 길어 좁은 화면에서 본문이 밀렸다) */
@@ -18,7 +19,7 @@
 .adm-head{margin-bottom:14px}
 .adm-head .sec-h{font-size:1.5rem;margin:.2rem 0 .3rem}
 .adm-head .caption{display:block}
-@media (max-width:860px){.adm{grid-template-columns:1fr}.adm-side{position:static}
+@media (max-width:860px){.adm{grid-template-columns:1fr}.adm-side{position:static;max-height:none}
   .adm-side .nav-grp{flex-direction:row;flex-wrap:wrap;gap:4px}.adm-side .nav-grp .grp{width:100%}.adm-side a{padding:6px 10px;font-size:.9rem}}
 /* 웹훅 줄: 주소 전체를 한 줄에 (넘치면 말줄임, 마우스를 올리면 전체) */
 .hook-url{min-width:0}.hook-url code{display:block;font-size:.8rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
@@ -107,3 +108,7 @@ pre.code{background:var(--code-bg);border:1px solid var(--line);border-radius:10
 /* iframe */
 .adm-frame{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff}
 .code-block{font-family:var(--f-mono);font-size:1.1rem;padding:10px 14px;border:1px dashed var(--accent);border-radius:10px;letter-spacing:.08em;user-select:all}
+/* 방문 패턴 — 요일 × 시간 표 (참여 분석) */
+.heat{border-collapse:collapse;font-size:.78rem}
+.heat th,.heat td{border:1px solid var(--line);padding:3px 0;min-width:26px;text-align:center}
+.heat tbody th{padding:3px 8px}

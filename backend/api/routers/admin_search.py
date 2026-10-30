@@ -54,11 +54,11 @@ def put_ask_settings(request: Request, body: dict[str, Any]) -> dict:
         return v
 
     new = {**cfg, "enabled": bool(body.get("enabled", cfg["enabled"])),
-           "free_daily": num("free_daily", 0, 100), "member_daily": num("member_daily", 1, 500),
+           "free_credits": num("free_credits", 0, 100), "free_daily": num("free_daily", 0, 100), "member_daily": num("member_daily", 1, 500),
            "per_ip_daily": num("per_ip_daily", 1, 1000), "global_daily": num("global_daily", 1, 100000),
            "plan_price": str(body.get("plan_price", cfg.get("plan_price", "")) or "").strip()[:80],
            "web_search": bool(body.get("web_search", cfg["web_search"]))}
     settings_store.save_section("ask", new)
     log_action(request, "질문하기 설정 저장",
-               f"사용={new['enabled']}, 무료={new['free_daily']}, 구독={new['member_daily']}, IP당={new['per_ip_daily']}")
+               f"사용={new['enabled']}, 무료횟수={new['free_credits']}, 구독={new['member_daily']}, IP당={new['per_ip_daily']}")
     return {"ok": True, "ask": new}

@@ -18,6 +18,24 @@ type TodayData = {
   quiz: Quiz[]; score: number; done: boolean; streak: number; poll?: Poll | null; yesterday?: Yesterday; map_url?: string;
 };
 
+/** 메일에서 고른 답 — ?mq={문항}:{보기번호} (퀴즈) · ?mp={보기번호}#poll (예측).
+ *  메일 보안 스캐너가 링크를 미리 열어 보므로, 링크만으로는 아무것도 제출하지 않고 한 번 더 누르게 한다. */
+type MailPick = { kind: "quiz"; i: number; choice: number } | { kind: "poll"; choice: number };
+function readMailPick(): MailPick | null {
+  const sp = new URLSearchParams(window.location.search);
+  const mq = sp.get("mq"), mp = sp.get("mp");
+  if (!mq && !mp) return null;
+  // 새로고침해도 다시 뜨지 않게 주소에서 지운다 (d= 등 다른 파라미터는 남긴다)
+  sp.delete("mq"); sp.delete("mp");
+  const q = sp.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${q ? `?${q}` : ""}${window.location.hash}`);
+  if (mq) {
+    const m = /^(\d{1,2}):(\d{1,2})$/.exec(mq);
+    return m ? { kind: "quiz", i: Number(m[1]), choice: Number(m[2]) } : null;
+  }
+  return /^\d{1,2}$/.test(mp || "") ? { kind: "poll", choice: Number(mp) } : null;
+}
+
 /** 다음 문제(한국 시간 자정)까지 남은 시간. */
 function leftUntilMidnightKST(): { h: number; m: number } {
   const kst = Date.now() + 9 * 3600 * 1000;
@@ -37,6 +55,28 @@ export default function Today() {
     const t = window.setInterval(() => setLeft(leftUntilMidnightKST()), 30000);
     return () => window.clearInterval(t);
   }, []);
+
+  // 메일 링크로 온 선택 — 처음 한 번만 읽고 주소에서 지운다
+  const [mail, setMail] = useState<MailPick | null>(readMailPick);
+  const mailTarget = useMemo(() => {
+    if (!data || !mail) return null;
+    if (mail.kind === "quiz") {
+      const q = data.quiz.find((x) => x.i === mail.i);
+      return q ? { id: `quiz-${q.i}`, option: q.mine ? null : q.options[mail.choice] ?? null } : null;
+    }
+    const p = data.poll;
+    return p ? { id: "poll", option: p.mine ? null : p.options[mail.choice] ?? null } : null;
+  }, [data, mail]);
+  useEffect(() => {
+    if (!data || !mail) return;
+    if (!mailTarget) { setMail(null); return; }
+    // Layout 이 경로가 바뀌면 맨 위로 올리므로 그 뒤에 문항으로 옮긴다; 이미 답했거나 보기 번호가 없으면 결과만 보여 주고 끝
+    // (cleanup 으로 타이머를 지우지 않는다 — setMail(null) 로 바로 다시 그려져도 스크롤은 돼야 하므로)
+    setTimeout(() => document.getElementById(mailTarget.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
+    if (!mailTarget.option) setMail(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, mailTarget]);
+  const mailOpt = mailTarget?.option || null;
 
   const quiz = useMemo(() => data?.quiz ?? [], [data]);
   const answered = quiz.filter((q) => q.mine).length;
@@ -101,21 +141,27 @@ export default function Today() {
 
       {msg && <Alert kind="warn">{msg}</Alert>}
 
-      {quiz.map((q, idx) => (
-        <div className="box quiz-card" key={q.i}>
-          <div className="ax-q">Q{idx + 1}. {q.q}</div>
-          <div className="quiz-sub">{q.sub}</div>
-          {q.mine ? (
-            <AnsweredQuiz q={q} mine={q.mine} />
-          ) : (
-            <div className="opt-row" style={{ gridTemplateColumns: `repeat(${Math.max(1, q.options.length)}, minmax(0,1fr))` }}>
-              {q.options.map((o) => (
-                <button key={o} className="btn opt" type="button" disabled={busy === `q${q.i}`} onClick={() => answer(q, o)}>{o}</button>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+      {quiz.map((q, idx) => {
+        const fromMail = mail?.kind === "quiz" && mail.i === q.i ? mailOpt : null;
+        return (
+          <div className={`box quiz-card ${fromMail ? "mail-focus" : ""}`} key={q.i} id={`quiz-${q.i}`}>
+            <div className="ax-q">Q{idx + 1}. {q.q}</div>
+            <div className="quiz-sub">{q.sub}</div>
+            {q.mine ? (
+              <AnsweredQuiz q={q} mine={q.mine} />
+            ) : (
+              <>
+                <div className="opt-row" style={{ gridTemplateColumns: `repeat(${Math.max(1, q.options.length)}, minmax(0,1fr))` }}>
+                  {q.options.map((o) => (
+                    <button key={o} className={`btn opt ${o === fromMail ? "mail-pick" : ""}`} type="button" disabled={busy === `q${q.i}`} onClick={() => answer(q, o)}>{o}</button>
+                  ))}
+                </div>
+                {fromMail && <MailBar option={fromMail} label="이 답으로 제출" busy={busy === `q${q.i}`} onSubmit={() => answer(q, fromMail)} onDismiss={() => setMail(null)} />}
+              </>
+            )}
+          </div>
+        );
+      })}
 
       {quiz.length > 0 && answered === quiz.length && (
         <>
@@ -129,22 +175,28 @@ export default function Today() {
         </>
       )}
 
-      {poll && (
-        <>
-          <div className="eyebrow" style={{ marginTop: 22 }}>내일의 키워드 예측</div>
-          <h3 className="sec-h" style={{ fontSize: "1.35rem" }}>🔮 {poll.question}</h3>
-          <p className="caption" style={{ margin: "-6px 0 8px" }}>{poll.target_day || "내일"}에 발행된 기사 기준으로 내일 정답을 공개합니다.</p>
-          {poll.mine ? (
-            <PollResult poll={poll} />
-          ) : (
-            <div className="opt-row" style={{ gridTemplateColumns: `repeat(${Math.max(1, poll.options.length)}, minmax(0,1fr))` }}>
-              {poll.options.map((o) => (
-                <button key={o} className="btn opt" type="button" disabled={busy === "poll"} onClick={() => vote(o)}>{o}</button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
+      {poll && (() => {
+        const fromMail = mail?.kind === "poll" ? mailOpt : null;
+        return (
+          <div id="poll" className={fromMail ? "mail-focus" : undefined}>
+            <div className="eyebrow" style={{ marginTop: 22 }}>내일의 키워드 예측</div>
+            <h3 className="sec-h" style={{ fontSize: "1.35rem" }}>🔮 {poll.question}</h3>
+            <p className="caption" style={{ margin: "-6px 0 8px" }}>{poll.target_day || "내일"}에 발행된 기사 기준으로 내일 정답을 공개합니다.</p>
+            {poll.mine ? (
+              <PollResult poll={poll} />
+            ) : (
+              <>
+                <div className="opt-row" style={{ gridTemplateColumns: `repeat(${Math.max(1, poll.options.length)}, minmax(0,1fr))` }}>
+                  {poll.options.map((o) => (
+                    <button key={o} className={`btn opt ${o === fromMail ? "mail-pick" : ""}`} type="button" disabled={busy === "poll"} onClick={() => vote(o)}>{o}</button>
+                  ))}
+                </div>
+                {fromMail && <MailBar option={fromMail} label="이 예측으로 투표" busy={busy === "poll"} onSubmit={() => vote(fromMail)} onDismiss={() => setMail(null)} />}
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {(answered > 0 || poll?.mine) && (
         <>
@@ -186,6 +238,19 @@ function LazyMap() {
 /** 지도 iframe 은 html 문자열이 같으면 다시 그리지 않는다. */
 function MapFrame({ html }: { html: string }) {
   return useMemo(() => <DocFrame html={html} title="참여 지도" fallback={560} />, [html]);
+}
+
+/** 메일에서 고른 답 확인 줄 — 제출은 이 버튼을 눌러야만 (링크 열기만으로는 아무것도 보내지 않음). */
+function MailBar({ option, label, busy, onSubmit, onDismiss }: { option: string; label: string; busy: boolean; onSubmit: () => void; onDismiss: () => void }) {
+  return (
+    <div className="mail-bar" role="status">
+      <span>📩 메일에서 고른 답: <b>{option}</b></span>
+      <div className="btn-row">
+        <button className="btn primary sm" type="button" disabled={busy} onClick={onSubmit}>{label}</button>
+        <button className="btn ghost sm" type="button" disabled={busy} onClick={onDismiss}>다른 답 고르기</button>
+      </div>
+    </div>
+  );
 }
 
 function AnsweredQuiz({ q, mine }: { q: Quiz; mine: Mine }) {

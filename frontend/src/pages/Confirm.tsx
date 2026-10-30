@@ -20,7 +20,7 @@ export default function ConfirmPage() {
     try {
       await post("subscribe/confirm", { t: token });
       setDone(true);
-      setState({ subscribed: true });
+      setState({ subscribed: true, sub_pending: null });  // 확인 대기 → 구독 완료
     } catch (e) {
       setErr((e as ApiError).message || "링크가 만료됐거나 이미 확인된 신청입니다. 구독 창에서 다시 신청해 주세요.");
     } finally {

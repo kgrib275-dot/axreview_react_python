@@ -117,7 +117,7 @@ def _rows() -> list[dict]:
              ".env에 GEMINI_API_KEYS" + (" — 없으면 의미 검색·벡터화가 멈춥니다" if use_claude else "")))
         ask = cfg["ask"]
         add("AI", "질문하기 한도", OK if ask.get("global_daily", 40) <= 60 else WARN,
-            f"무료 {ask['free_daily']}회 · 월 구독 {ask['member_daily']}회 · 무료 IP {ask['per_ip_daily']}회 · "
+            f"구독자 무료 {ask.get('free_credits', 3)}회(가입 시) · 월 구독 {ask['member_daily']}회/일 · IP {ask['per_ip_daily']}회 · "
             f"전체 {ask.get('global_daily', 40)}회 / 일 · 활성 월 구독 {membership.active_count()}명",
             "" if ask.get("global_daily", 40) <= 60 else "질문 1건에 Gemini 1~3회 — 무료 키 한도(키당 하루 약 20회)에 비해 큽니다")
         unscored = len(db.unscored_articles(14))

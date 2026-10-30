@@ -1,7 +1,7 @@
 // 관리자·접속 — 관리자 IP 추가/삭제, 접속 기록(관리 작업·질문하기·페이지 조회·전체), 관리자 행동 기록 (app_pages/admin/access.py).
 import { useEffect, useState } from "react";
 import { Alert, Metric, Tabs, useLoad } from "../../components/ui";
-import { A, AdminHead, DataTable, Field, Row, asArray, isObj, pick, str, useAct } from "./common";
+import { A, AdminHead, DataTable, Field, Row, asArray, isObj, pick, str, useAct, useRemembered } from "./common";
 
 const VIEWS = ["관리 작업", "질문하기", "페이지 조회", "전체"];
 
@@ -14,7 +14,7 @@ export default function Access() {
   const myIp = isObj(ips.data) ? str(pick(ips.data, "my_ip", "client_ip")) : "";
   const [f, setF] = useState({ label: "", ip: "" });
   useEffect(() => { if (myIp && !f.ip) setF((x) => ({ ...x, ip: myIp })); }, [myIp]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [view, setView] = useState(VIEWS[0]);
+  const [view, setView] = useRemembered("view", VIEWS[0]);
   const all = asArray(logs.data, "logs", "items");
   const rows = all.filter((r) => {
     const a = str(r.action);

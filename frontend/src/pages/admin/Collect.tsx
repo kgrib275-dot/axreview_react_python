@@ -1,7 +1,7 @@
 // 수집 설정 — 소스 on/off(그룹별), 키워드 규칙 편집, 수집 테스트(미리보기·선택 소스 실제 수집) (app_pages/admin/collect_settings.py).
 import { useEffect, useState } from "react";
 import { Alert, Tabs, useLoad } from "../../components/ui";
-import { A, AdminHead, Check, DataTable, Multi, Row, asArray, bool, isObj, num, pick, str, useAct } from "./common";
+import { A, AdminHead, Check, DataTable, Multi, Row, asArray, bool, isObj, num, pick, str, useAct, useRemembered } from "./common";
 import { JobStatus, LogView, StartJob, toLine } from "./JobRunner";
 import { CATEGORIES } from "./Review";
 
@@ -133,7 +133,7 @@ function TestCollect() {
 }
 
 export default function Collect() {
-  const [sec, setSec] = useState(SECTIONS[0]);
+  const [sec, setSec] = useRemembered("sec", SECTIONS[0]);
   return (
     <div>
       <AdminHead title="수집 설정" note="소스 목록 자체(URL·그룹)는 config/sources.yaml에서 관리합니다." />

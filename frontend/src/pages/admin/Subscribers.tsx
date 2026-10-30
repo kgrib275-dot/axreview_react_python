@@ -1,7 +1,7 @@
 // 구독·발송 — 구독자 / 뉴스레터 / 월 구독 / Teams / 문의 (app_pages/admin/subscribers.py).
 import { useEffect, useState } from "react";
 import { Alert, Tabs, useLoad } from "../../components/ui";
-import { A, AdminHead, CsvButton, DataTable, Expander, Field, Generic, Row, asArray, bool, isObj, num, pick, str, today, useAct } from "./common";
+import { A, AdminHead, CsvButton, DataTable, Expander, Field, Generic, Row, asArray, bool, isObj, num, pick, str, today, useAct, useRemembered } from "./common";
 import { JobStatus, RunLogTable, StartJob, useJobs } from "./JobRunner";
 
 const SECTIONS = ["구독자", "뉴스레터", "월 구독", "Teams", "문의"];
@@ -20,15 +20,41 @@ function SubscribersTab() {
   useEffect(() => setActive(Object.fromEntries(subs.map((s) => [str(s.email), bool(s.active)]))), [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const byCode: Record<string, number> = {};
   subs.forEach((s) => { const r = str(s.referred_by); if (r) byCode[r] = (byCode[r] || 0) + 1; });
+  // 질문 횟수 충전 (AX 질문하기 횟수제) — 충전 요청(ask_requested_at)이 있는 구독자를 맨 위에 따로 보여 준다
+  const requests = subs.filter((s) => str(s.ask_requested_at));
+  const [addN, setAddN] = useState<Record<string, number>>({});
+  const charge = async (email: string) => {
+    const n = Math.min(100, Math.max(1, Math.floor(addN[email] ?? 10)));
+    const r = await act(() => A.put<Row>("subscribers/credits", { email, add: n }), `${email} 에 ${n}회 충전했습니다.${smtp === false ? " (SMTP 미설정 — 안내 메일은 가지 않았습니다)" : ""}`);
+    if (r) reload();
+  };
+  const chargeCtl = (email: string) => (
+    <span className="inline" style={{ gap: 4 }}>
+      <input type="number" min={1} max={100} value={addN[email] ?? 10} style={{ width: 64 }} onChange={(e) => setAddN({ ...addN, [email]: Number(e.target.value) })} />
+      <button className="btn sm" type="button" onClick={() => charge(email)}>+{Math.min(100, Math.max(1, Math.floor(addN[email] ?? 10)))} 충전</button>
+    </span>
+  );
   const view = subs.filter((s) => !q.trim() || str(s.email).toLowerCase().includes(q.trim().toLowerCase())).map((s) => ({
     이메일: str(s.email), 구독일: str(s.created_at).slice(0, 19).replace("T", " "), 활성: str(s.email), 업종: Array.isArray(s.industries) ? s.industries.join(", ") : str(s.industries),
     확인: !!s.confirmed_at || bool(s.confirmed), "추천 수": num(pick(s, "referrals", "referral_count")) || byCode[str(s.ref_code)] || 0,
+    질문: `${num(s.ask_used)}/${num(s.ask_credits)}${str(s.ask_requested_at) ? " 충전 요청" : ""}`, 충전: str(s.email),
   }));
   const csvRows = subs.map((s) => { const { token, ...rest } = s; void token; return rest; });
   const activeCount = Object.values(active).filter(Boolean).length;
   return (
     <div>
       {error && <Alert kind="err">{error}</Alert>}
+      {requests.length > 0 && (
+        <div className="box" style={{ margin: "0 0 12px" }}>
+          <Alert kind="warn"><b>충전 요청 {requests.length}건</b> — 질문 횟수를 다 쓴 구독자가 충전을 기다립니다. 충전하면 구독자에게 안내 메일이 갑니다.</Alert>
+          {requests.map((s) => (
+            <div key={str(s.email)} className="list-row">
+              <div className="grow"><b>{str(s.email)}</b> · 질문 {num(s.ask_used)}/{num(s.ask_credits)} · 요청 {str(s.ask_requested_at).slice(0, 16).replace("T", " ")}</div>
+              {chargeCtl(str(s.email))}
+            </div>
+          ))}
+        </div>
+      )}
       {pending.length > 0 && (
         <div className="list-row">
           <b className="grow">확인 대기 {pending.length}명 — 확인 메일의 링크를 눌러야 발송 대상이 됩니다. 7일이 지나면 자동 삭제됩니다.</b>
@@ -42,8 +68,12 @@ function SubscribersTab() {
         전체 {subs.length} · 활성 {activeCount} · 추천으로 구독 {num(counts.referred)} · 보상({str(counts.reward_at) || "?"}명) 달성 {num(counts.rewarded)}
       </p>
       <Field label="이메일 찾기"><input type="text" placeholder="일부만 입력해도 됩니다" value={q} onChange={(e) => setQ(e.target.value)} /></Field>
-      <DataTable rows={view} cols={["이메일", "구독일", "활성", "업종", "추천 수", "확인"]} tall
-        render={{ 활성: (v) => <input type="checkbox" checked={!!active[str(v)]} onChange={(e) => setActive({ ...active, [str(v)]: e.target.checked })} /> }} />
+      <DataTable rows={view} cols={["이메일", "구독일", "활성", "업종", "추천 수", "확인", "질문", "충전"]} tall
+        render={{
+          활성: (v) => <input type="checkbox" checked={!!active[str(v)]} onChange={(e) => setActive({ ...active, [str(v)]: e.target.checked })} />,
+          질문: (v) => { const t = str(v); const req = t.endsWith(" 충전 요청"); return <>{req ? t.slice(0, -6) : t}{req && <span className="badge" style={{ marginLeft: 6 }}>충전 요청</span>}</>; },
+          충전: (v) => chargeCtl(str(v)),
+        }} />
       <div className="btn-row" style={{ margin: "10px 0" }}>
         <button className="btn primary" onClick={async () => {
           const changed = subs.filter((s) => active[str(s.email)] !== undefined && active[str(s.email)] !== bool(s.active));
@@ -231,7 +261,7 @@ function ContactsTab() {
 }
 
 export default function Subscribers() {
-  const [sec, setSec] = useState(SECTIONS[0]);
+  const [sec, setSec] = useRemembered("sec", SECTIONS[0]);
   return (
     <div>
       <AdminHead title="구독·발송" />

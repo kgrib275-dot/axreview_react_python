@@ -1,5 +1,7 @@
 // AX 질문하기 (/ask) — 노트·수집 기사를 근거로 답하는 채팅. 대화는 브라우저 sessionStorage 에만 남고 서버에는 저장하지 않는다.
-// 한도는 서버 기록으로 센다 ('대화 지우기'·새로고침으로 초기화되지 않음). 한도 넘으면 월 구독 안내 + 구독 코드 입력.
+// 한도는 서버 기록으로 센다 ('대화 지우기'·새로고침으로 초기화되지 않음).
+// 횟수제: 뉴스레터 구독자만 — 구독 확인 때 무료 횟수(free_credits)를 받고, 다 쓰면 '충전 요청' → 관리자가 충전. 구독자가 아니면(linked=false)
+// 구독하거나, 이미 구독 중이면 구독 주소로 연결 메일을 받아 이 브라우저를 잇는다 (?link=토큰 → 버튼을 눌러야 확정, 메일 검사기 대비).
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, get, post } from "../api";
@@ -10,7 +12,7 @@ import "./Ask.css";
 
 type Source = { title: string; url: string; kind: string; sim: number };
 type Turn = { role: "user" | "assistant"; content: string; sources?: Source[]; weak?: boolean };
-type Usage = { enabled: boolean; quota: number; used: number; limit_hit: boolean; member?: { expires?: string } | null; is_admin: boolean; free_daily: number; member_daily: number; plan_price?: string; global_hit?: boolean; web_search?: boolean };
+type Usage = { enabled: boolean; quota: number; used: number; limit_hit: boolean; linked: boolean; email_masked?: string; requested?: boolean; member?: { expires?: string } | null; is_admin: boolean; free_credits: number; member_daily: number; plan_price?: string; global_hit?: boolean; web_search?: boolean };
 
 const HKEY = "axreview-ask-history";
 const EXAMPLES = ["제조 현장에 AI 에이전트를 도입한 사례 알려줘", "에이전트 운영 거버넌스는 어떻게 설계해?", "이번 주 AX 흐름을 3줄로 요약해줘", "금융권 AX 노트만 모아줘"];
@@ -21,7 +23,7 @@ function loadHistory(): Turn[] {
 
 export default function Ask() {
   const { me, reload: reloadMe } = useMe();
-  const { openMembership } = useDialogs();
+  const { openMembership, openSubscribe } = useDialogs();
   const { data: usage, error, loading, reload, setData } = useLoad<Usage>(() => get<Usage>("ask/usage"), []);
   const [history, setHistory] = useState<Turn[]>(() => loadHistory());
   // 홈 맛보기의 예시 질문(?q=)은 입력칸에 채워만 둔다 — 질문 한도를 쓰는 전송은 본인이 누른다
@@ -29,6 +31,10 @@ export default function Ask() {
   const [busy, setBusy] = useState<"ask" | "web" | null>(null);
   const [warn, setWarn] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null); // 답을 기다리는 중인 질문
+  // 연결 메일의 토큰(?link=) — 자동으로 확정하지 않고 버튼을 눌러야 보낸다
+  const [linkToken, setLinkToken] = useState(() => { const t = new URLSearchParams(window.location.search).get("link") || ""; return /^[0-9a-f]{32}$/.test(t) ? t : ""; });
+  const [linkMsg, setLinkMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [reqBusy, setReqBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,6 +48,38 @@ export default function Ask() {
   const member = usage?.member || me?.member || null;
   const isAdmin = !!usage?.is_admin;
   const quota = usage?.quota ?? 0, used = usage?.used ?? 0;
+  const linked = !!usage?.linked;
+
+  const stripLink = () => {
+    const u = new URL(window.location.href);
+    u.searchParams.delete("link");
+    window.history.replaceState(null, "", u.pathname + (u.search || "") + u.hash);
+    setLinkToken("");
+  };
+  const confirmLink = async () => {
+    setLinkMsg(null);
+    try {
+      const r = await post<{ ok: boolean; email_masked: string }>("ask/link/confirm", { t: linkToken });
+      setLinkMsg({ kind: "ok", text: `${r.email_masked} 구독자로 연결됐습니다.` });
+      stripLink();
+      reload(); reloadMe();
+    } catch (e) {
+      setLinkMsg({ kind: "err", text: (e as ApiError).message });
+    }
+  };
+  const requestCredits = async () => {
+    if (reqBusy) return;
+    setReqBusy(true);
+    try {
+      await post("ask/request");
+      setData(usage ? { ...usage, requested: true } : usage);
+      reload();
+    } catch (e) {
+      setWarn((e as ApiError).message);
+    } finally {
+      setReqBusy(false);
+    }
+  };
 
   const send = async (question: string) => {
     const text = question.trim().slice(0, 500);
@@ -99,6 +137,17 @@ export default function Ask() {
 
       {usage?.enabled && (
         <>
+          {linkToken && (
+            <div className="box ask-upsell">
+              <p><b>이 브라우저를 구독자로 연결</b><br />메일의 링크로 들어왔습니다. 아래 버튼을 누르면 이 브라우저가 구독한 주소와 이어져 남은 질문 횟수를 씁니다.</p>
+              <div className="btn-row">
+                <button className="btn primary" type="button" onClick={confirmLink}>🔗 연결하기</button>
+                <button className="btn" type="button" onClick={stripLink}>취소</button>
+              </div>
+            </div>
+          )}
+          {linkMsg && <Alert kind={linkMsg.kind}>{linkMsg.text}</Alert>}
+
           {!history.length && !limitHit && (
             <>
               <p className="caption">예시 질문</p>
@@ -153,25 +202,40 @@ export default function Ask() {
             <p className="caption">관리자는 질문 한도 없이 사용합니다.</p>
           ) : member ? (
             <p className="caption">⭐ 월 구독 · 오늘 {Math.max(quota - used, 0)}/{quota}회 남음 · {member.expires}까지</p>
-          ) : !limitHit ? (
-            <p className="caption">무료 질문 오늘 {Math.max(quota - used, 0)}/{quota}회 남음 · 더 필요하면 월 구독 (하루 {usage.member_daily}회)</p>
+          ) : linked && !limitHit ? (
+            <p className="caption">남은 질문 {Math.max(quota - used, 0)}/{quota}회 · {usage.email_masked}</p>
           ) : null}
 
           {limitHit && usage.global_hit ? (
             <p className="caption">오늘 전체 질문 한도에 도달했습니다. 내일 다시 이용해 주세요.</p>
           ) : limitHit && member ? (
             <p className="caption">오늘 질문을 모두 썼습니다. 내일 다시 이용해 주세요.</p>
-          ) : limitHit ? (
+          ) : !isAdmin && !linked ? (
             <div className="box ask-upsell">
-              <p><b>오늘 무료 질문 {quota}회를 모두 썼어요.</b><br />월 구독하면 하루 <b>{usage.member_daily}회</b>까지 물어볼 수 있습니다. ({usage.plan_price || "가격·결제 방법은 담당자가 안내해 드립니다"})</p>
-              <button className="btn primary" type="button" onClick={openMembership}>🏅 월 구독 신청하기</button>
-              <RedeemForm onDone={() => { reload(); reloadMe(); }} memberDaily={usage.member_daily} />
+              <p><b>AX 질문하기는 뉴스레터 구독자에게 무료 {usage.free_credits}회(이후 관리자 충전) 제공됩니다.</b><br />구독은 무료이고, 확인 메일의 버튼을 누르면 이 브라우저에서 바로 질문할 수 있습니다.</p>
+              <button className="btn primary" type="button" onClick={() => openSubscribe("ask")}>✉️ 무료로 구독하기</button>
+              <details className="expander" style={{ marginTop: 10 }}>
+                <summary>이미 구독 중이라면 구독한 이메일로 이 브라우저를 연결</summary>
+                <div className="body"><LinkForm /></div>
+              </details>
+            </div>
+          ) : limitHit && linked ? (
+            <div className="box ask-upsell">
+              <p><b>질문 횟수를 모두 썼습니다.</b> ({used}/{quota}회 · {usage.email_masked})<br />관리자 승인 후 충전됩니다. 충전되면 메일로 알려 드립니다.</p>
+              {usage.requested ? (
+                <button className="btn" type="button" disabled>요청됨 · 충전되면 메일로 알려 드립니다</button>
+              ) : (
+                <button className="btn primary" type="button" disabled={reqBusy} onClick={requestCredits}>{reqBusy ? "요청하는 중..." : "🔋 충전 요청하기"}</button>
+              )}
             </div>
           ) : null}
-          {!member && !isAdmin && !limitHit && (
+          {!member && !isAdmin && (
             <details className="expander">
               <summary>월 구독 코드가 있나요?</summary>
-              <div className="body"><RedeemForm onDone={() => { reload(); reloadMe(); }} memberDaily={usage.member_daily} /></div>
+              <div className="body">
+                <RedeemForm onDone={() => { reload(); reloadMe(); }} memberDaily={usage.member_daily} />
+                <p className="caption" style={{ marginTop: 8 }}>월 구독(하루 {usage.member_daily}회)은 담당자 안내 후 코드로 적용됩니다. <button className="btn sm" type="button" onClick={openMembership}>🏅 월 구독 신청하기</button></p>
+              </div>
             </details>
           )}
 
@@ -189,6 +253,38 @@ export default function Ask() {
         </>
       )}
     </div>
+  );
+}
+
+/** 구독한 이메일로 연결 메일 받기 — 응답은 구독 여부와 무관하게 같은 문구 (존재 여부 비노출). */
+function LinkForm() {
+  const [email, setEmail] = useState("");
+  const [msg, setMsg] = useState<{ kind: "ok" | "err" | "warn"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setMsg(null); setBusy(true);
+    try {
+      const r = await post<{ message: string }>("ask/link", { email: email.trim() });
+      setMsg({ kind: "ok", text: r.message });
+      setEmail("");
+    } catch (err) {
+      const er = err as ApiError;
+      setMsg(er.status === 429 ? { kind: "warn", text: "잠시 후 다시 시도해 주세요." } : { kind: "err", text: er.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="redeem" onSubmit={submit}>
+      <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+        <label>구독한 이메일</label>
+        <input type="email" value={email} maxLength={254} placeholder="you@company.com" onChange={(e) => setEmail(e.target.value)} />
+      </div>
+      <button className="btn" disabled={busy || !email.trim()}>{busy ? "보내는 중..." : "연결 메일 받기"}</button>
+      {msg && <div style={{ flexBasis: "100%" }}><Alert kind={msg.kind}>{msg.text}</Alert></div>}
+    </form>
   );
 }
 

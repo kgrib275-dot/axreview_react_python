@@ -1,7 +1,7 @@
 // 노트 검토 — 검토 대기/게시됨/반려됨/직접 작성. 편집 폼 + 게시·저장·반려·삭제 (app_pages/admin/review.py).
 import { useState } from "react";
 import { Alert, Tabs, useLoad } from "../../components/ui";
-import { A, AdminHead, Expander, Field, Multi, Row, asArray, splitCsv, str, useAct } from "./common";
+import { A, AdminHead, Expander, Field, Multi, Row, asArray, splitCsv, str, useAct, useRemembered } from "./common";
 import { useJobs } from "./JobRunner";
 
 export const CATEGORIES = ["AX Strategy", "AX Implementation", "AX Enablement"];
@@ -62,7 +62,7 @@ function NoteForm({ note, onSubmit }: { note: Row | null; onSubmit: (action: "pu
 }
 
 export default function Review() {
-  const [view, setView] = useState(VIEWS[0]);
+  const [view, setView] = useRemembered("view", VIEWS[0]);
   const { finished } = useJobs();
   const status = STATUS[view];
   const { data, error, reload } = useLoad(async () => (status ? asArray(await A.get(`notes?status=${status}`), "notes", "items") : []), [status, finished]);

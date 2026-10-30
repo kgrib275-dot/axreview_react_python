@@ -43,7 +43,9 @@ def summary(kind: str, result: dict) -> str:
     if kind == "weekly":
         return f"{result.get('week')} · 노트 {result.get('notes')}편 · {'게시' if result.get('published') else '초안'}"
     if kind in ("newsletter", "teams"):
-        return f"발송 {result.get('sent', 0)} · 실패 {len(result.get('failed', []))}"
+        failed = result.get("failed", 0)
+        n_failed = failed if isinstance(failed, int) else len(failed or [])  # 뉴스레터는 실패 '수', Teams 는 실패 '목록' (2026-10-30 대시보드 500)
+        return f"발송 {result.get('sent', 0)} · 실패 {n_failed}"
     if kind == "vectorize":
         return " · ".join(f"{'노트' if t == 'notes' else '기사'} {v['embedded']}/{v['pending']}" for t, v in result.items()
                          if isinstance(v, dict))

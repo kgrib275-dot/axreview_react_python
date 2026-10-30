@@ -46,12 +46,28 @@ const norm = {
   },
 };
 
+/** 메일 문제 — ?mt={track}:{seed}:{보기번호}. question_key 는 GET /api/terms?track=&seed= 의 seed(16진수 8~32자)이고 그 문제 세트의 0번 문항을 쓴다.
+ *  메일 보안 스캐너가 링크를 미리 열어 보므로, 링크만으로는 채점하지 않고 '이 답으로 확인'을 눌러야 POST 한다. */
+type MailTerm = { track: string; seed: string; choice: number };
+function readMailTerm(): MailTerm | null {
+  const sp = new URLSearchParams(window.location.search);
+  const mt = sp.get("mt");
+  if (!mt) return null;
+  // 새로고침해도 다시 뜨지 않게 주소에서 지운다
+  sp.delete("mt");
+  const q = sp.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${q ? `?${q}` : ""}${window.location.hash}`);
+  const m = /^([a-z]{1,10}):([0-9a-f]{8,32}):(\d{1,2})$/.exec(mt);
+  return m ? { track: m[1], seed: m[2], choice: Number(m[3]) } : null;
+}
+
 export default function Terms() {
   useShareVisit("terms");
   const { state, setState } = useMe();
   const [params] = useSearchParams();
   const [tab, setTab] = useState("🎯 퀴즈");
   const [msg, setMsg] = useState<string | null>(null);
+  const [mail, setMail] = useState<MailTerm | null>(readMailTerm);
   // 트랙 목록·사전은 한 번만 받는다 (?track 은 아무 쪽이나)
   const { data, error, loading } = useLoad<TermsData>(() => get<TermsData>("terms?track=ai"), []);
   const tracks = useMemo(() => Object.fromEntries(Object.entries(data?.tracks || {}).map(([k, v]) => [k, norm.track(v)])) as Record<string, Track>, [data]);
@@ -88,7 +104,14 @@ export default function Terms() {
 
       {tab === "📘 용어 사전" && <Dictionary tracks={tracks} dictionary={dictionary} />}
 
-      {tab === "🎯 퀴즈" && (
+      {tab === "🎯 퀴즈" && mail && (
+        <MailTermCard mail={mail} tracks={tracks}
+          onStart={(k) => { setMail(null); start(k); }}
+          onClose={() => setMail(null)}
+          // 모르는 key(세트를 못 만들거나 보기 번호가 없음) → 그냥 그 트랙 퀴즈를 연다; 트랙도 모르면 트랙 고르기 화면
+          onInvalid={() => { setMail(null); if (tracks[mail.track] && (!track || !qs.length)) start(mail.track); }} />
+      )}
+      {tab === "🎯 퀴즈" && !mail && (
         !track || !qs.length ? (
           <TrackPick tracks={tracks} dictionary={dictionary} stats={data?.stats} shared={[params.get("track") || "", params.get("score") || ""]} onStart={start} />
         ) : i < qs.length ? (
@@ -197,6 +220,78 @@ function AskTerm({ track, tracks, qs, i, picks, seen, onSeen, onNext, onQuit }: 
         )}
       </div>
       <button className="btn sm ghost" type="button" style={{ marginTop: 10 }} onClick={onQuit}>그만하고 트랙 다시 고르기</button>
+    </>
+  );
+}
+
+/** 메일 문제 카드 — 세트(seed)의 0번 문항을 받아 메일에서 고른 보기를 표시하고, 확인 버튼을 눌러야 채점한다. */
+function MailTermCard({ mail, tracks, onStart, onClose, onInvalid }: {
+  mail: MailTerm; tracks: Record<string, Track>; onStart: (k: string) => void; onClose: () => void; onInvalid: () => void;
+}) {
+  const { track, seed, choice } = mail;
+  const [item, setItem] = useState<Question | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  // 보기를 바꿔 누르면 표시만 바뀐다 — 서버로 보내는 것은 '이 답으로 확인'뿐
+  const [pickIdx, setPickIdx] = useState(choice);
+  useEffect(() => {
+    let alive = true;
+    get<TermsData>(`terms?track=${encodeURIComponent(track)}&seed=${encodeURIComponent(seed)}`)
+      .then((r) => {
+        const q = (r.questions || [])[0];
+        if (!alive) return;
+        if (!q || !q.options?.[choice]) onInvalid(); else setItem({ ...q, i: q.i ?? 0 });
+      })
+      .catch(() => alive && onInvalid());
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track, seed, choice]);
+  if (!item) return <div className="page-loading">메일 문제를 여는 중…</div>;
+  const picked = item.options[pickIdx] ?? item.options[choice];
+  const answered = typeof item.pick === "string";
+  const t = tracks[track];
+  const ex = explainOf(item);
+  const confirm = async () => {
+    if (busy || answered) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await post<AnswerRes>("terms/answer", { track, seed, i: item.i, pick: picked });
+      setItem({ ...item, pick: picked, correct: !!r.correct, answer: r.answer, explain: r.explain });
+    } catch (e) {
+      setErr((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <div className="progress"><span>📩 메일 문제 · {t ? `${t.emoji} ${t.title}` : track}</span></div>
+      <div className="box term-card mail-card">
+        <div className="ax-q">{questionText(item)}</div>
+        <div className="term-prompt">{item.prompt}</div>
+        {err && <Alert kind="err">{err}</Alert>}
+        <div className="term-opts">
+          {item.options.map((opt, k) => {
+            const mark = answered ? (opt === item.answer ? "⭕ " : opt === picked ? "❌ " : "") : "";
+            return <button key={k} className={`btn term-opt ${opt === picked ? "mail-pick" : ""}`} type="button" disabled={answered || busy} onClick={() => setPickIdx(k)}>{mark}{opt}</button>;
+          })}
+        </div>
+        {!answered ? (
+          <div className="mail-bar" role="status">
+            <span>{pickIdx === choice ? "메일에서 고른 답" : "바꾼 답"}: <b>{picked}</b></span>
+            <button className="btn primary sm" type="button" disabled={busy} onClick={confirm}>이 답으로 확인</button>
+          </div>
+        ) : (
+          <div className={`term-fb ${item.correct ? "ok" : "no"}`} style={{ marginTop: 12 }}>
+            <b>{item.correct ? "⭕ 정답!" : "❌ 아쉬워요"}</b>
+            <div><b>{ex.term}</b>{ex.define && <> — {ex.define}</>}</div>
+            {ex.hint && <span>💡 {ex.hint}</span>}
+          </div>
+        )}
+        <button className="btn primary block" type="button" style={{ marginTop: 10 }} onClick={() => onStart(tracks[track] ? track : Object.keys(tracks)[0] || track)}>10문제 풀기 →</button>
+      </div>
+      <button className="btn sm ghost" type="button" style={{ marginTop: 10 }} onClick={onClose}>닫고 트랙 고르기</button>
     </>
   );
 }

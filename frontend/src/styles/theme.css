@@ -268,3 +268,10 @@ font[style]{background:none!important;box-shadow:none!important}
 .doc-frame{width:100%;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
 /* 내용이 오기 전 짧은 "불러오는 중" 아래로 푸터가 올라왔다가 내려가며 화면이 흔들리지 않게 (CLS 0.14~0.37) */
 main{min-height:100vh}
+
+/* 구독 신청 완료 화면 (components/Dialogs.tsx) — 다음에 할 일 두 단계만 보인다 */
+.sub-done{text-align:center}
+.sub-done-ic{font-size:2.6rem;line-height:1;margin:6px 0 8px}
+.sub-done-mail{margin:0 0 12px;font-size:1.05rem;overflow-wrap:anywhere}
+.sub-done ol{text-align:left;margin:0 auto 10px;padding-left:22px;max-width:420px;display:grid;gap:6px;color:var(--ink-2);line-height:1.6}
+.sub-done ol b{color:var(--ink)}

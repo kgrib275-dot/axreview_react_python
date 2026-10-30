@@ -56,7 +56,8 @@ function SubscribeDialog({ source, onClose }: { source: string; onClose: () => v
     try {
       const r = await post<{ message: string }>("subscribe", { email: addr, industries: inds, agree, source, ref: state.ref || "", typo_ok: typoOk });
       setMsg({ kind: "ok", text: r.message });
-      setState({ subscribed: true, pref_inds: inds });
+      // 아직 '확인 대기' — 구독 완료(subscribed)는 메일의 '구독 확인하기'를 누른 뒤 Confirm 페이지가 기록한다
+      setState({ sub_pending: true, pref_inds: inds });  // 주소는 방문자 상태에 남기지 않는다
     } catch (err) {
       const e = err as ApiError;
       setMsg({ kind: "err", text: e.message, suggest: typeof e.data?.suggest === "string" ? e.data.suggest : undefined });
@@ -71,6 +72,23 @@ function SubscribeDialog({ source, onClose }: { source: string; onClose: () => v
     if (!/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(addr)) return setMsg({ kind: "err", text: "이메일 주소 형식을 확인해 주세요. 예: name@company.com" });
     return send(addr);
   };
+  // 신청이 끝나면 입력란 대신 '다음에 할 일' 화면 — 전엔 안내문 아래 입력란·구독 버튼이 그대로 남아 끝난 건지 알 수 없었다 (2026-10-30)
+  if (msg?.kind === "ok") {
+    return (
+      <Dialog title="확인 메일을 보냈습니다" onClose={onClose}>
+        <div className="sub-done">
+          <div className="sub-done-ic">📬</div>
+          <p className="sub-done-mail"><b>{email.trim()}</b></p>
+          <ol>
+            <li>메일함에서 <b>"[AX Review] 구독 신청을 확인해 주세요"</b>를 엽니다.</li>
+            <li>메일 안의 <b>"구독 확인하기"</b> 버튼을 누르면 구독이 완료됩니다.</li>
+          </ol>
+          <p className="caption">메일이 안 보이면 스팸함·프로모션함도 확인해 주세요. 보낸 사람은 AX Review 입니다.</p>
+          <button type="button" className="btn primary block" style={{ marginTop: 14 }} onClick={onClose}>확인</button>
+        </div>
+      </Dialog>
+    );
+  }
   return (
     <Dialog title="매주 한 호, 메일로 받아 보세요" onClose={onClose}>
       <div style={{ display: "grid", gap: 8, margin: "2px 0 8px" }}>
@@ -179,6 +197,7 @@ export function SubscribeCTA({ source, headline, sub, button = "무료로 구독
   const { state } = useMe();
   const { openSubscribe } = useDialogs();
   if (state.subscribed) return <Alert kind="ok">구독 중입니다. 다음 호에서 만나요!</Alert>;
+  if (state.sub_pending) return <Alert kind="info">📬 확인 메일을 보냈습니다. 메일의 '구독 확인하기'를 누르면 구독이 완료됩니다.</Alert>;
   return (
     <div className="cta-card">
       <span className="ic">📬</span>

@@ -26,3 +26,9 @@
 .ax-emoji{font-size:3.4rem;line-height:1}.ax-code{font-family:var(--f-mono);letter-spacing:.3em;color:var(--accent-2);margin-top:8px}
 .ax-type h2{font-family:var(--f-display);font-weight:900;font-size:clamp(1.7rem,5vw,2.4rem);margin:6px 0}
 .ax-line{color:var(--ink-2);font-size:1rem;margin:0 auto 10px;max-width:520px}
+/* 메일 문제(?mt=) — 메일에서 고른 보기를 미리 표시하고, 확인 버튼을 눌러야만 채점 */
+.mail-card{border-color:rgba(46,155,234,.55);box-shadow:0 0 0 3px rgba(46,155,234,.18)}
+.btn.term-opt.mail-pick{border-color:var(--accent-deep);background:rgba(10,111,214,.16);box-shadow:0 0 0 2px rgba(46,155,234,.35) inset;font-weight:700}
+.mail-card .mail-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:12px;padding:10px 14px;border-radius:12px;
+  border:1px solid rgba(46,155,234,.45);background:rgba(10,111,214,.08);font-size:.95rem;color:var(--ink-2)}
+.mail-card .mail-bar b{color:var(--ink)}

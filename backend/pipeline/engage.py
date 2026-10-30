@@ -150,6 +150,8 @@ def erase_visitor(visitor: str) -> int:
         n += conn.execute("DELETE FROM profiles WHERE visitor=?", (visitor,)).rowcount
         if conn.execute("SELECT 1 FROM sqlite_master WHERE name='visitor_state'").fetchone():
             n += conn.execute("DELETE FROM visitor_state WHERE visitor=?", (visitor,)).rowcount
+        if "visitor" in {r[1] for r in conn.execute("PRAGMA table_info(subscribers)")}:
+            conn.execute("UPDATE subscribers SET visitor = NULL WHERE visitor=?", (visitor,))  # 메일 개인화 연결도 끊는다
         conn.commit()
         return n
     finally:
@@ -712,6 +714,23 @@ def poll_result(day_iso: str) -> dict | None:
     band = r["metric"] in ("hi_ratio", "total") or r["metric"].startswith("volume:")
     return {"day": day_iso, "target_day": r["target_day"], "question": r["question"], "options": options, "band": band,
             "actual": actual, "votes": votes, "winner": winner, "crowd": votes.most_common(1)[0][0] if votes else None}
+
+
+def latest_poll_result(max_back: int = 14) -> dict | None:
+    """정답이 나온 가장 최근 투표 (뉴스레터 '지난 예측' 블록) — 대상 날짜가 지난 투표부터 거꾸로 본다.
+    채점은 최근 10일치 기사로 하므로 그보다 오래된 투표는 정답이 없어 건너뛴다 → max_back 으로 상한."""
+    conn = _conn()
+    try:
+        _ensure_poll_columns(conn)
+        days = [r[0] for r in conn.execute("SELECT day FROM daily_polls WHERE target_day < ? ORDER BY day DESC LIMIT ?",
+                                           (today().isoformat(), max_back))]
+    finally:
+        conn.close()
+    for d in days:
+        res = poll_result(d)
+        if res and res["winner"]:
+            return res
+    return None
 
 
 # ───────────────────────── 집계 (관리 화면) ─────────────────────────

@@ -29,9 +29,11 @@ DEFAULTS = {
     "teams": {"enabled": False, "weekday": 0, "time": "09:30"},
     "webhooks": [],  # [{"id", "name", "url", "enabled"}]
     # 공개 'AX 질문하기' — 인터넷에 공개되므로 Gemini 호출 남용을 막는 한도를 둔다.
-    # free_daily: 무료 방문자 하루 질문 수, member_daily: 월 구독자 하루 질문 수 (pipeline/membership.py).
-    # per_ip_daily는 무료 방문자에게만 적용한다 (쿠키를 지워 무료 한도를 다시 받는 것 방지, 구독자는 회사 공용 IP일 수 있음).
-    "ask": {"enabled": True, "free_daily": 3, "member_daily": 30, "per_ip_daily": 10, "global_daily": 40,
+    # free_credits: 뉴스레터 구독자가 가입(확인) 때 한 번 받는 무료 질문 횟수 — 다 쓰면 관리자가 충전(관리 > 구독·발송 > 구독자).
+    # free_daily: 예전 '무료 방문자 하루 질문 수' — 구독자 횟수제로 바뀌어 한도에는 더 쓰지 않는다 (저장된 설정 호환용으로만 남김).
+    # member_daily: 월 구독자(코드) 하루 질문 수 (pipeline/membership.py).
+    # per_ip_daily는 구독 횟수제 밖의 남용 상한 (쿠키를 지워도 IP 로 묶임, 월 구독자 제외), global_daily 는 전체 합계.
+    "ask": {"enabled": True, "free_credits": 3, "free_daily": 3, "member_daily": 30, "per_ip_daily": 10, "global_daily": 40,
             "web_search": True, "plan_price": ""},
     # 편집 관점 (pipeline/editorial.py) — '리더가 알아야 할 3가지' 선정과 본문 색 강조에 쓴다.
     "lens": {"stance": "현업 리더가 이번 주 바로 움직일 수 있는 것만 고릅니다.",

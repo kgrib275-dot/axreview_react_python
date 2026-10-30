@@ -22,7 +22,7 @@ from pipeline import db, jobs, mailer, membership, notify, referral, settings_st
 
 router = APIRouter(prefix="/admin", tags=["admin-subscribers"], dependencies=[Depends(require_admin)])
 
-_SUB_PUBLIC = ("email", "created_at", "active", "industries", "ref_code", "referred_by")
+_SUB_PUBLIC = ("email", "created_at", "active", "industries", "ref_code", "referred_by", "ask_credits", "ask_used", "ask_requested_at")
 
 
 def _sub_rows(q: str = "") -> list[dict]:
@@ -47,7 +47,32 @@ def list_subscribers(q: str = "") -> dict:
     rc = referral.counts()
     return {"subscribers": rows, "total": len(all_rows), "active": sum(1 for r in all_rows if r["active"]),
             "referred": rc["referred"], "rewarded": rc["rewarded"], "reward_at": referral.REWARD_AT,
-            "pending": len(db.pending_confirmations()), "smtp_ok": mailer.is_configured()}
+            "pending": len(db.pending_confirmations()), "smtp_ok": mailer.is_configured(),
+            # 질문 충전 요청 (api/routers/ask.py request) — 충전하면 ask_requested_at 이 지워져 목록에서 빠진다
+            "ask_requests": [r for r in all_rows if r.get("ask_requested_at")]}
+
+
+@router.put("/subscribers/credits")  # /subscribers/{email} 보다 위에 — 'credits' 가 이메일로 잡히지 않게
+def add_credits(request: Request, body: dict[str, Any]) -> dict:
+    """질문 횟수 충전 {email, add: 1~100} — 충전 요청 표시를 지우고, SMTP 가 있으면 구독자에게 알린다."""
+    email = str(body.get("email") or "").strip().lower()
+    try:
+        n = int(body.get("add") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "충전 횟수는 1~100 사이 정수입니다")
+    if not 1 <= n <= 100:
+        raise HTTPException(400, "충전 횟수는 1~100 사이 정수입니다")
+    if not db.ask_add_credits(email, n):
+        raise HTTPException(404, "구독자가 없습니다")
+    log_action(request, "질문 횟수 충전", f"{email} +{n}")
+    mailed = False
+    if mailer.is_configured():
+        try:
+            mailed = mailer.send([(email, "")], f"[AX Review] 질문 {n}회가 충전되었습니다", lambda _t: mailer.ask_credits_html(n))[0] == 1
+        except Exception:  # noqa: BLE001 - 안내 메일 실패가 충전을 되돌리지 않게
+            mailed = False
+    s = db.subscriber_ask(email) or {}
+    return {"ok": True, "mailed": mailed, "ask_credits": s.get("ask_credits", 0), "ask_used": s.get("ask_used", 0)}
 
 
 @router.get("/subscribers/csv")

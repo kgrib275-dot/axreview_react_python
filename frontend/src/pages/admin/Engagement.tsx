@@ -3,11 +3,79 @@
 import { useState } from "react";
 import { get } from "../../api";
 import { Alert, Metric, Tabs, useLoad } from "../../components/ui";
-import { A, AdminHead, Bar, Bars, Check, CsvButton, DataTable, Expander, Generic, HBars, Row, Seg, asArray, bool, isObj, num, pick, qs, str, useAct } from "./common";
+import { A, AdminHead, Bar, Bars, Check, CsvButton, DataTable, Expander, Generic, HBars, Row, Seg, asArray, bool, isObj, num, pick, qs, str, useAct, useRemembered } from "./common";
 
-const TABS = ["전체 현황", "일별 추이", "구독 유입", "맛보기", "유형 비교", "커리어 유형", "습관 진단", "자가진단", "퀴즈", "용어 퀴즈", "예측 투표", "참여 지도"];
+const TABS = ["방문 패턴", "전체 현황", "일별 추이", "구독 유입", "맛보기", "유형 비교", "커리어 유형", "습관 진단", "자가진단", "퀴즈", "용어 퀴즈", "예측 투표", "메일", "참여 지도"];
 const BY: Record<string, string> = { age: "연령대", gender: "성별", country: "국가", region: "시·도" };
+// 뉴스레터 참여 장치(메일 속 링크 종류) 한글 라벨 — 서버 devices 목록에 없는 키도 그대로 보인다
+const DEVICE_LABEL: Record<string, string> = { quiz: "퀴즈", poll: "예측", term: "용어", type: "유형 테스트", streak: "연속 참여", note: "노트", flow: "사이트 보기" };
+const DEFAULT_DEVICES = Object.keys(DEVICE_LABEL);
+const devLabel = (k: string) => DEVICE_LABEL[k] || k;
+const pct = (v: unknown) => { const x = num(v); return x <= 1 ? x * 100 : x; };  // ctr 는 0~1 비율 또는 % 둘 다 받는다
 const sec = (d: Row, ...keys: string[]) => { const v = pick(d, ...keys); return isObj(v) ? v : {}; };
+
+/** 방문 패턴 — 시간대·요일 / 이동 경로 / 전환 / 재방문 / 구독자 질문 사용 (GET admin/engagement/patterns). */
+function PatternTab({ d }: { d: Row }) {
+  const heat = asArray(pick(d, "heat"));
+  const hmax = Math.max(1, ...heat.flatMap((r) => Object.entries(r).filter(([k]) => k !== "요일").map(([, v]) => num(v))));
+  const rev = sec(d, "revisit");
+  const ask = sec(d, "ask");
+  const daily = asArray(pick(rev, "daily"));
+  return (
+    <div>
+      <p className="caption">화면 이동 기록(경로만, 쿼리·관리자 이동 제외)을 익명 방문자 쿠키별로 묶었습니다. {SESSION_NOTE}</p>
+      {pick(d, "empty") === true && <Alert kind="info">아직 이 기간의 화면 이동 기록이 없습니다. 방문 기록은 이번 배포 이후부터 쌓입니다 — 질문 사용 집계(아래)는 바로 볼 수 있습니다.</Alert>}
+      <div className="metrics">
+        <Metric k="방문자" v={num(pick(d, "visitors"))} />
+        <Metric k="방문(세션)" v={num(pick(d, "sessions"))} />
+        <Metric k="세션당 화면" v={num(pick(d, "pages_per_session"))} />
+        <Metric k="한 화면만 보고 떠남" v={`${num(pick(d, "bounce_rate"))}%`} />
+        <Metric k="재방문율(2일+)" v={`${num(pick(d, "revisit_rate"))}%`} />
+      </div>
+
+      <h3 style={{ margin: "16px 0 8px" }}>① 시간대·요일별 방문</h3>
+      <p className="caption">칸 숫자 = 그 요일·시간(한국 시간)에 들어온 방문자 수. 진할수록 많습니다 — 뉴스레터·Teams 발송 시각을 정할 때 참고하세요.</p>
+      <div style={{ overflowX: "auto" }}>
+        <table className="heat"><thead><tr><th />{Array.from({ length: 24 }, (_, h) => <th key={h}>{h}</th>)}</tr></thead>
+          <tbody>{heat.map((r) => (
+            <tr key={str(r["요일"])}><th>{str(r["요일"])}</th>{Array.from({ length: 24 }, (_, h) => { const v = num(r[String(h).padStart(2, "0")]); return (
+              <td key={h} title={`${str(r["요일"])} ${h}시 · ${v}명`} style={{ background: v ? `rgba(46,155,234,${0.12 + (v / hmax) * 0.78})` : undefined }}>{v || ""}</td>); })}</tr>
+          ))}</tbody></table>
+      </div>
+      <div className="row2" style={{ marginTop: 10 }}>
+        <div><p className="caption">시간대별</p><Bars rows={asArray(pick(d, "by_hour"))} labelKey="시" series={["방문자"]} height={160} /></div>
+        <div><p className="caption">요일별</p><HBars items={asArray(pick(d, "by_weekday")).map((r) => [str(r["요일"]), num(r["방문자"])] as [string, number])} /></div>
+      </div>
+
+      <h3 style={{ margin: "16px 0 8px" }}>② 이동 경로</h3>
+      <p className="caption">많이 나온 이동 순서 (한 방문 안에서, 같은 화면 새로고침은 한 번)</p>
+      <DataTable rows={asArray(pick(d, "paths"))} render={{ "비율(%)": (v) => <Bar v={num(v)} label={`${num(v)}%`} /> }} />
+      <div className="row2" style={{ marginTop: 10 }}>
+        <div><p className="caption">화면 → 화면 이동 횟수</p><DataTable rows={asArray(pick(d, "transitions"))} /></div>
+        <div><p className="caption">화면별 — 첫 화면(들어온 곳)·마지막 화면(떠난 곳)·이탈률</p>
+          <DataTable rows={asArray(pick(d, "pages"))} cols={["화면", "방문(세션)", "첫 화면", "마지막 화면", "이탈률(%)"]} /></div>
+      </div>
+
+      <h3 style={{ margin: "16px 0 8px" }}>③ 전환 — 방문 → 구독 → 확인 → 질문</h3>
+      <p className="caption">'앞 단계 거쳐 도달'은 같은 브라우저가 앞 단계를 모두 거친 경우만 셉니다. 구독 확인을 다른 기기에서 했다면 '이 단계만'에만 잡힙니다.</p>
+      <DataTable rows={asArray(pick(d, "funnel"))} render={{ "방문 대비(%)": (v) => <Bar v={num(v)} label={`${num(v)}%`} />, "직전 대비(%)": (v) => <Bar v={num(v)} label={`${num(v)}%`} /> }} />
+
+      <h3 style={{ margin: "16px 0 8px" }}>④ 다시 찾아오는 사람</h3>
+      <div className="row2">
+        <div><p className="caption">기간 안에 방문한 날 수별 방문자</p><HBars items={asArray(pick(rev, "buckets")).map((r) => [str(r["방문한 날"]), num(r["방문자"])] as [string, number])} /></div>
+        <div><p className="caption">날짜별 신규·재방문 (재방문 = 그 전에 한 번이라도 온 방문자)</p>
+          {daily.length ? <Bars rows={daily} labelKey="날짜" series={["신규", "재방문"]} height={160} /> : <p className="caption">데이터 없음</p>}</div>
+      </div>
+
+      <h3 style={{ margin: "16px 0 8px" }}>⑤ 구독자별 질문 사용</h3>
+      <p className="caption">확인된 구독자 {num(pick(ask, "subscribers"))}명 · 누적 질문 {num(pick(ask, "used_total"))}회 · 충전 받은 구독자 {num(pick(ask, "recharged"))}명 · 충전 대기 {num(pick(ask, "requests"))}명 · 이 기간에 질문한 브라우저 {num(pick(ask, "askers_in_period"))}개</p>
+      <HBars items={asArray(pick(ask, "states")).map((r) => [str(r["상태"]), num(r["구독자"])] as [string, number])} />
+      <p className="caption" style={{ marginTop: 10 }}>많이 쓴 순서 (질문했거나 충전을 요청한 구독자, 50명까지) — 충전은 구독·발송 &gt; 구독자에서</p>
+      <DataTable rows={asArray(pick(ask, "top"))} />
+    </div>
+  );
+}
+const SESSION_NOTE = "30분 넘게 이동이 없으면 새 방문(세션)으로 봅니다.";
 
 /** 행 라벨 × 열 라벨 교차표 ({row: {col: v}}) → 표. */
 function Cross({ obj, suffix = "" }: { obj: unknown; suffix?: string }) {
@@ -20,10 +88,47 @@ function Cross({ obj, suffix = "" }: { obj: unknown; suffix?: string }) {
 /** {라벨: 수} → 가로 막대. */
 const toItems = (v: unknown): [string, number][] => (isObj(v) ? Object.entries(v).map(([k, x]) => [k, num(x)]) : asArray(v).map((r) => [str(pick(r, "label", "name", "유형", "용어", "key")), num(pick(r, "count", "n", "value", "수"))]));
 
+/** 메일 탭 — 발송별 클릭(장치별)과 전체 CTR. 응답은 {sends:[{id,sent_at,subject,recipients,clicks:{quiz..},unique:{..}}], devices:[..], totals:{recipients,clicks,ctr}} 로 보되 빠진 키는 비워 둔다. */
+function MailTab({ d }: { d: Row }) {
+  const sends = asArray(pick(d, "sends", "items", "rows"));
+  const devList = asArray<string>(pick(d, "devices")).map(str).filter(Boolean);
+  const devices = devList.length ? devList : DEFAULT_DEVICES;
+  const totals = sec(d, "totals", "summary");
+  const tClicks = sec(totals, "clicks");
+  const tCtr = sec(totals, "ctr");
+  const tRecipients = num(pick(totals, "recipients")) || sends.reduce((a, s) => a + num(pick(s, "recipients")), 0);
+  // 서버가 ctr 를 안 주면 클릭(고유 우선)/수신자로 계산한다
+  const ctrOf = (dev: string) => (tCtr[dev] !== undefined ? pct(tCtr[dev]) : tRecipients ? (num(pick(sec(totals, "unique"), dev) ?? tClicks[dev]) / tRecipients) * 100 : 0);
+  const rows = sends.map((s) => {
+    const clicks = sec(s, "clicks");
+    const uniq = sec(s, "unique");
+    const rcpt = num(pick(s, "recipients", "sent", "n"));
+    const clicked = pick(s, "clicked", "unique_total");
+    const total = clicked !== undefined ? num(clicked) : devices.reduce((a, k) => a + num(uniq[k] ?? clicks[k]), 0);
+    const ctr = pick(s, "ctr");
+    return {
+      발송일: str(pick(s, "sent_at", "day", "date")).slice(0, 16).replace("T", " "),
+      제목: str(pick(s, "subject", "title")),
+      수신자: rcpt,
+      ...Object.fromEntries(devices.map((k) => [devLabel(k), uniq[k] !== undefined && num(uniq[k]) !== num(clicks[k]) ? `${num(clicks[k])} (${num(uniq[k])}명)` : num(clicks[k] ?? uniq[k])])),
+      "CTR(%)": ctr !== undefined ? pct(ctr) : rcpt ? Math.round((total / rcpt) * 1000) / 10 : 0,
+    };
+  });
+  if (!sends.length && !Object.keys(tClicks).length) return <p className="caption">아직 메일 클릭 기록이 없습니다. 뉴스레터를 보내고 독자가 퀴즈·예측·용어 링크를 누르면 여기에 쌓입니다.</p>;
+  return (
+    <div>
+      <p className="caption">장치별 전체 CTR — 수신자 {tRecipients}명 기준, 장치 링크를 한 번이라도 누른 비율(%)</p>
+      <HBars items={devices.map((k) => [devLabel(k), Math.round(ctrOf(k) * 10) / 10] as [string, number])} />
+      <p className="caption" style={{ marginTop: 10 }}>발송별 클릭 — 칸은 클릭 수, 괄호는 누른 사람 수(고유)</p>
+      <DataTable rows={rows} render={{ "CTR(%)": (v) => <Bar v={num(v)} label={`${num(v).toFixed(1)}%`} /> }} />
+    </div>
+  );
+}
+
 export default function Engagement() {
-  const [days, setDays] = useState(14);
+  const [days, setDays] = useRemembered<number>("days", 14);
   const [sample, setSample] = useState(false);
-  const [tab, setTab] = useState(TABS[0]);
+  const [tab, setTab] = useRemembered("tab", TABS[0]);
   const [by, setBy] = useState("age");
   const act = useAct();
   const { data, error, reload } = useLoad(() => A.get<Row>(`engagement${qs({ days, sample: sample ? 1 : "", by })}`), [days, sample, by]);
@@ -54,6 +159,10 @@ export default function Engagement() {
   const empty = pick(d, "empty") === true || (!daily.length && n("visitors") === 0 && !Object.keys(kinds).length);
 
   const map = useLoad(async () => (tab === "참여 지도" ? get<string>(`/api/map/html${qs({ days, sample: sample ? 1 : "" })}`) : null), [tab, days, sample]);
+  // 메일 탭을 열 때만 받는다 (발송별 클릭은 기간 필터와 무관)
+  const mail = useLoad(async () => (tab === "메일" ? A.get<Row>("engagement/mail") : null), [tab]);
+  // 방문 패턴 탭을 열 때만 계산한다 (기간 선택은 따른다, 예시 데이터는 항상 제외)
+  const pattern = useLoad(async () => (tab === "방문 패턴" ? A.get<Row>(`engagement/patterns${qs({ days })}`) : null), [tab, days]);
 
   return (
     <div>
@@ -90,6 +199,7 @@ export default function Engagement() {
       {empty && data && <Alert kind="info">아직 이 기간의 참여 기록이 없습니다. /type, /today 에서 참여가 생기면 여기에 쌓입니다.</Alert>}
 
       <Tabs items={TABS} value={tab} onChange={setTab} />
+      {tab === "방문 패턴" && (pattern.error ? <Alert kind="err">{pattern.error}</Alert> : pattern.data ? <PatternTab d={pattern.data} /> : <p className="caption">불러오는 중…</p>)}
       {tab === "전체 현황" && (
         <div>
           <p className="caption">사이트에서 기록되는 모든 참여 종류입니다. 새 기능이 기록을 남기기 시작하면 이 표에 자동으로 추가됩니다. 방문자는 익명 쿠키 기준입니다.</p>
@@ -178,6 +288,7 @@ export default function Engagement() {
         </div>
       ) : <p className="caption">데이터 없음</p>)}
       {tab === "예측 투표" && <DataTable rows={polls} />}
+      {tab === "메일" && (mail.error ? <Alert kind="err">{mail.error}</Alert> : mail.data ? <MailTab d={mail.data} /> : <p className="caption">불러오는 중…</p>)}
       {tab === "참여 지도" && (map.error ? <Alert kind="err">{map.error}</Alert> : map.data ? <iframe className="adm-frame" title="참여 지도" srcDoc={map.data} style={{ height: 620 }} /> : <p className="caption">지도를 불러오는 중…</p>)}
 
       {Object.keys(unknown).length > 0 && (

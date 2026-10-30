@@ -116,6 +116,16 @@ _MIGRATIONS = [
     ("subscribers", "confirmed_at", "TEXT"),  # 확인 메일 링크를 누른 시각 — 이것이 있어야 발송·추천 집계 (이중 확인)
     ("subscribers", "confirm_token", "TEXT"),  # 확인 메일 링크용 (해지 토큰과 별도)
     ("subscribers", "ref_key", "TEXT"),  # 본인 추천 현황·지난 호 열람 열쇠 (해지 토큰과 별도, pipeline/referral.py)
+    # 이 구독자가 쓰는 브라우저의 방문자 값(c:…) — 메일 링크(/m)나 구독 확인을 쿠키 있는 브라우저에서 열 때 잇는다.
+    # 메일 본문을 개인화(연속 참여·지난 예측·내 유형)하는 데만 쓰고, 한 번 이어지면 덮어쓰지 않는다.
+    ("subscribers", "visitor", "TEXT"),
+    # AX 질문하기 횟수제 (api/routers/ask.py) — 구독 확인 때 settings ask.free_credits 만큼 주고, 다 쓰면 관리자가 충전한다.
+    # 하루 단위가 아니라 누적(credits/used)이다 — 무료는 '구독자당 N회'뿐이고 그 뒤는 승인된 만큼만.
+    ("subscribers", "ask_credits", "INTEGER NOT NULL DEFAULT 0"),
+    ("subscribers", "ask_used", "INTEGER NOT NULL DEFAULT 0"),
+    ("subscribers", "ask_requested_at", "TEXT"),  # '충전 요청하기'를 누른 시각 — 충전하면 지운다 (관리 화면 배지)
+    ("subscribers", "link_token", "TEXT"),  # '질문하기 연결' 메일 링크 (브라우저↔구독자 잇기, 1시간, 한 번만)
+    ("subscribers", "link_expires", "TEXT"),
 ]
 
 
@@ -359,6 +369,89 @@ def confirm_subscription(confirm_token: str) -> str | None:
                 return None
             conn.execute("UPDATE subscribers SET confirmed_at = COALESCE(confirmed_at, ?), confirm_token = NULL, "
                          "ref_key = COALESCE(ref_key, ?) WHERE email = ?", (_now(), secrets.token_hex(16), row["email"]))
+    finally:
+        conn.close()
+    ensure_ask_credits(row["email"])  # 처음 확인한 구독자에게 무료 질문 횟수
+    return row["email"]
+
+
+# ───────────────────────── AX 질문하기 횟수 ─────────────────────────
+
+def _free_credits() -> int:
+    from . import settings_store  # settings_store 가 db.ROOT 를 쓰므로 모듈 위에서 서로 부르지 못한다
+    return int(settings_store.load()["ask"].get("free_credits", 3))
+
+
+def ensure_ask_credits(email: str) -> bool:
+    """아직 한 번도 횟수를 받지 않은 구독자(0/0)에게 무료 횟수를 준다. 횟수제 도입 전 구독자·관리자가 직접 넣은 주소도
+    질문하기에 처음 연결될 때 이걸로 받는다. 줬으면 True."""
+    return _exec("UPDATE subscribers SET ask_credits = ? WHERE email = ? AND ask_credits = 0 AND ask_used = 0",
+                 (_free_credits(), email)) == 1
+
+
+_ASK_COLS = "email, ask_credits, ask_used, ask_requested_at, visitor"
+
+
+def subscriber_by_visitor(visitor: str) -> dict | None:
+    """이 브라우저에 이어진 '활성·확인된' 구독자 — 질문하기 한도의 주인. 쿠키 방문자(c:)만 (IP 해시는 공용 IP 로 섞인다)."""
+    if not visitor.startswith("c:"):
+        return None
+    rows = _rows(f"SELECT {_ASK_COLS} FROM subscribers WHERE visitor = ? AND active = 1 AND confirmed_at IS NOT NULL", (visitor,))
+    return rows[0] if rows else None
+
+
+def subscriber_ask(email: str) -> dict | None:
+    rows = _rows(f"SELECT {_ASK_COLS} FROM subscribers WHERE email = ?", (email,))
+    return rows[0] if rows else None
+
+
+def ask_consume(email: str) -> bool:
+    """질문 1회 차감 — 남은 횟수가 있을 때만 한 문장으로(UPDATE … WHERE used < credits) 늘려 동시 요청이 한도를 넘지 못하게."""
+    return _exec("UPDATE subscribers SET ask_used = ask_used + 1 WHERE email = ? AND ask_used < ask_credits", (email,)) == 1
+
+
+def ask_refund(email: str) -> None:
+    """LLM 호출이 실패했을 때 차감한 1회를 돌려준다."""
+    _exec("UPDATE subscribers SET ask_used = ask_used - 1 WHERE email = ? AND ask_used > 0", (email,))
+
+
+def ask_add_credits(email: str, n: int) -> bool:
+    """관리자 충전 — 충전 요청 표시도 지운다."""
+    return _exec("UPDATE subscribers SET ask_credits = ask_credits + ?, ask_requested_at = NULL WHERE email = ?", (int(n), email)) == 1
+
+
+def ask_request(email: str) -> bool:
+    """'충전 요청하기' — 이미 요청해 둔 상태면 시각을 바꾸지 않는다 (같은 요청으로 경보를 다시 울리지 않게). 새로 남겼으면 True."""
+    return _exec("UPDATE subscribers SET ask_requested_at = ? WHERE email = ? AND ask_requested_at IS NULL", (_now(), email)) == 1
+
+
+LINK_TOKEN_MINUTES = 60
+
+
+def issue_link_token(email: str) -> str | None:
+    """'질문하기 연결' 메일용 토큰 — 활성·확인된 구독자에게만, 1시간. 새로 만들면 이전 토큰은 무효."""
+    token = secrets.token_hex(16)
+    expires = (datetime.now() + timedelta(minutes=LINK_TOKEN_MINUTES)).isoformat(timespec="seconds")
+    ok = _exec("UPDATE subscribers SET link_token = ?, link_expires = ? WHERE email = ? AND active = 1 AND confirmed_at IS NOT NULL",
+               (token, expires, email)) == 1
+    return token if ok else None
+
+
+def consume_link_token(token: str, visitor: str) -> str | None:
+    """연결 링크의 토큰으로 이 브라우저를 그 구독자에 잇는다 (visitor 를 덮어쓴다 — 본인이 메일을 열어 눌렀으니 새 브라우저가 맞다).
+    토큰은 한 번만 쓰고 지운다. 이메일을 돌려주고, 만료·없음·IP 방문자면 None."""
+    if not visitor.startswith("c:") or not re.fullmatch(r"[0-9a-f]{32}", token or ""):
+        return None
+    conn = connect()
+    try:
+        with conn:
+            row = conn.execute("SELECT email FROM subscribers WHERE link_token = ? AND link_expires > ? AND active = 1 AND confirmed_at IS NOT NULL",
+                               (token, _now())).fetchone()
+            if not row:
+                return None
+            # 같은 브라우저가 다른 구독자에 이어져 있었다면 그쪽 연결은 푼다 — 한 브라우저 = 한 구독자
+            conn.execute("UPDATE subscribers SET visitor = NULL WHERE visitor = ? AND email != ?", (visitor, row["email"]))
+            conn.execute("UPDATE subscribers SET visitor = ?, link_token = NULL, link_expires = NULL WHERE email = ?", (visitor, row["email"]))
             return row["email"]
     finally:
         conn.close()
@@ -380,8 +473,23 @@ def unsubscribe(token: str) -> str | None:
 def subscribers(active_only: bool = False) -> list[dict]:
     """active_only=True: 발송 대상 = 해지하지 않았고 확인 링크를 누른 구독자."""
     where = "WHERE active = 1 AND confirmed_at IS NOT NULL" if active_only else ""
-    return _rows(f"SELECT email, created_at, active, token, industries, ref_code, referred_by, confirmed_at, ref_key FROM subscribers {where} "
-                 "ORDER BY created_at DESC")
+    return _rows(f"SELECT email, created_at, active, token, industries, ref_code, referred_by, confirmed_at, ref_key, visitor, "
+                 f"ask_credits, ask_used, ask_requested_at FROM subscribers {where} ORDER BY created_at DESC")
+
+
+def subscriber_by_token(token: str) -> dict | None:
+    """해지 토큰으로 구독자 한 명 (메일 링크 /m 이 '진짜 구독자의 링크인지' 볼 때) — 이메일은 돌려주지 않는다."""
+    rows = _rows("SELECT active, confirmed_at, visitor FROM subscribers WHERE token = ?", (token,))
+    return rows[0] if rows else None
+
+
+def link_subscriber_visitor(visitor: str, token: str | None = None, email: str | None = None) -> bool:
+    """구독자 ↔ 브라우저 방문자 값을 잇는다. 이미 다른 값이 있으면 그대로 둔다 (남의 메일 링크를 열어도 주인의 연결이 바뀌지 않게).
+    쿠키 방문자(c:)만 — IP 해시(i:)는 회사 공용 IP 로 여러 사람이 묶여 남의 기록이 내 메일에 실릴 수 있다."""
+    if not visitor.startswith("c:") or not (token or email):
+        return False
+    col, key = ("token", token) if token else ("email", email)
+    return _exec(f"UPDATE subscribers SET visitor = ? WHERE {col} = ? AND (visitor IS NULL OR visitor = '')", (visitor, key)) == 1
 
 
 def set_subscriber_active(email: str, active: bool) -> None:

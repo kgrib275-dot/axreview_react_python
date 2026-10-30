@@ -4,7 +4,8 @@ import { Alert, Metric, useLoad } from "../../components/ui";
 import { A, AdminHead, Check, DataTable, Field, Row, asArray, bool, isObj, num, pick, str, useAct } from "./common";
 import { JobStatus, StartJob, useJobs } from "./JobRunner";
 
-type Ask = { enabled: boolean; free_daily: number; member_daily: number; per_ip_daily: number; global_daily: number; plan_price: string; web_search: boolean };
+// free_credits: 구독자가 가입(확인) 때 한 번 받는 무료 질문 횟수 — 예전 free_daily(하루 단위)는 더 쓰지 않는다
+type Ask = { enabled: boolean; free_credits: number; member_daily: number; per_ip_daily: number; global_daily: number; plan_price: string; web_search: boolean };
 
 export default function Search() {
   const { finished } = useJobs();
@@ -13,10 +14,10 @@ export default function Search() {
   const cfg = data && isObj(data.ask) ? (data.ask as Row) : data || {};
   const emb = data && isObj(data.embeddings) ? (data.embeddings as Row) : data && isObj(data.counts) ? (data.counts as Row) : {};
   const hasKeys = pick(data, "has_api_keys", "has_keys", "gemini_ok");
-  const [f, setF] = useState<Ask>({ enabled: true, free_daily: 3, member_daily: 30, per_ip_daily: 10, global_daily: 300, plan_price: "", web_search: true });
+  const [f, setF] = useState<Ask>({ enabled: true, free_credits: 3, member_daily: 30, per_ip_daily: 10, global_daily: 300, plan_price: "", web_search: true });
   useEffect(() => {
     if (!data) return;
-    setF({ enabled: bool(cfg.enabled), free_daily: num(cfg.free_daily), member_daily: num(cfg.member_daily), per_ip_daily: num(cfg.per_ip_daily), global_daily: num(cfg.global_daily, 300), plan_price: str(cfg.plan_price), web_search: bool(cfg.web_search) });
+    setF({ enabled: bool(cfg.enabled), free_credits: num(cfg.free_credits, 3), member_daily: num(cfg.member_daily), per_ip_daily: num(cfg.per_ip_daily), global_daily: num(cfg.global_daily, 300), plan_price: str(cfg.plan_price), web_search: bool(cfg.web_search) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
   const [q, setQ] = useState("");
@@ -64,9 +65,9 @@ export default function Search() {
       <h3 style={{ marginTop: 20 }}>공개 'AX 질문하기' 설정</h3>
       <Check label="사용" checked={f.enabled} onChange={(v) => setF({ ...f, enabled: v })} />
       <div className="row4" style={{ marginTop: 10 }}>
-        <Field label="무료 1인 하루 질문 수"><input type="number" min={0} max={100} value={f.free_daily} onChange={(e) => setF({ ...f, free_daily: Number(e.target.value) })} /></Field>
+        <Field label="구독자 무료 질문 횟수(가입 시 1회 지급)"><input type="number" min={0} max={100} title="뉴스레터 구독 확인 때 한 번 지급. 다 쓰면 구독·발송 > 구독자에서 충전합니다." value={f.free_credits} onChange={(e) => setF({ ...f, free_credits: Number(e.target.value) })} /></Field>
         <Field label="월 구독 하루 질문 수"><input type="number" min={1} max={500} value={f.member_daily} onChange={(e) => setF({ ...f, member_daily: Number(e.target.value) })} /></Field>
-        <Field label="무료 IP당 하루 질문 수"><input type="number" min={1} max={1000} title="쿠키를 지워 무료 한도를 다시 받는 것을 막습니다. 월 구독자에게는 적용하지 않습니다." value={f.per_ip_daily} onChange={(e) => setF({ ...f, per_ip_daily: Number(e.target.value) })} /></Field>
+        <Field label="무료 IP당 하루 질문 수"><input type="number" min={1} max={1000} title="쿠키를 지워 한도를 다시 받는 것을 막는 남용 상한. 월 구독자에게는 적용하지 않습니다." value={f.per_ip_daily} onChange={(e) => setF({ ...f, per_ip_daily: Number(e.target.value) })} /></Field>
         <Field label="전체 하루 질문 수"><input type="number" min={1} max={100000} title="Gemini 키 한도 보호. 관리자 제외 모든 질문의 합계" value={f.global_daily} onChange={(e) => setF({ ...f, global_daily: Number(e.target.value) })} /></Field>
       </div>
       <Field label="월 구독 가격 안내 (비우면 '담당자가 안내')"><input type="text" maxLength={80} placeholder="월 9,900원" value={f.plan_price} onChange={(e) => setF({ ...f, plan_price: e.target.value })} /></Field>

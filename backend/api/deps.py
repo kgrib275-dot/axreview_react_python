@@ -92,11 +92,18 @@ def caller(request: Request, response: Response) -> Caller:
         raw, resign = uuid.uuid4().hex, True
     if resign or request.headers.get("x-refresh-cookie"):
         new_cookie = engage.sign_cookie(raw)
-    if new_cookie:  # HttpOnly: 화면 JS 는 읽지 않는다 — 스크립트로 훔쳐 월 구독을 가로채지 못하게
-        response.set_cookie(COOKIE, new_cookie, max_age=COOKIE_MAX_AGE, samesite="lax", httponly=True,
-                            secure=request.url.scheme == "https" or proxied, path="/")
-    return Caller(visitor=engage.visitor_id(raw, ip), raw=raw, ip=ip, proxied=proxied, is_admin=is_admin(request),
-                  new_cookie=new_cookie)
+    c = Caller(visitor=engage.visitor_id(raw, ip), raw=raw, ip=ip, proxied=proxied, is_admin=is_admin(request),
+               new_cookie=new_cookie)
+    plant_cookie(response, request, c)
+    return c
+
+
+def plant_cookie(response: Response, request: Request, c: Caller) -> None:
+    """방문자 쿠키를 응답에 심는다. 리다이렉트처럼 Response 를 직접 돌려주는 엔드포인트는 FastAPI 가 의존성의 response 헤더를
+    합쳐 주지 않으므로 그 응답에 다시 불러야 한다 (api/routers/mail_link.py)."""
+    if c.new_cookie:  # HttpOnly: 화면 JS 는 읽지 않는다 — 스크립트로 훔쳐 월 구독을 가로채지 못하게
+        response.set_cookie(COOKIE, c.new_cookie, max_age=COOKIE_MAX_AGE, samesite="lax", httponly=True,
+                            secure=request.url.scheme == "https" or c.proxied, path="/")
 
 
 def require_admin(request: Request) -> None:
