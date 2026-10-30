@@ -1,4 +1,4 @@
-"""공유 미리보기·결과 카드 이미지 (1200×630) — 유형 16장, 자가진단 단계 4장.
+"""공유 미리보기·결과 카드 이미지 (1200×630) — 유형 16장, 자가진단 단계 4장, 노트 카드(요청 때 1장씩).
 
 카카오톡·LinkedIn은 링크의 og:image를 미리보기로 쓰므로 결과마다 다른 이미지를 준다(app/web.py의 /s/… 주소).
 같은 이미지를 '결과 카드 이미지 받기'로도 내려 LinkedIn 피드에 올릴 수 있게 한다.
@@ -6,6 +6,9 @@
 """
 from __future__ import annotations
 
+import threading
+import time
+from datetime import datetime
 from html import escape
 from pathlib import Path
 
@@ -56,6 +59,84 @@ def diag_html(i: int) -> str:
 <div class="lv" style="color:{color};margin-top:34px">● {escape(name)} 단계</div><h1 style="margin-top:12px">우리 조직의 AX 준비도</h1>
 <div class="line">{escape(line)}</div></div>
 <div class="foot"><span class="cta">12문항 · 3분 자가진단 →</span><span class="brand">AX <b>REVIEW</b></span></div>""")
+
+
+def note_html(note: dict) -> str:
+    """노트 공유 카드 — 제목(최대 3줄 말줄임)·분류 칩·AX Review. 회사 브랜드는 넣지 않는다."""
+    title = str(note.get("title") or "")
+    cat = str(note.get("category") or "")
+    kind = str(note.get("kind") or "")
+    chips = "".join(f'<span class="chip">{escape(c)}</span>' for c in (cat, kind) if c)
+    return _page(f"""<div class="wrap"><div class="k">AX NOTE</div>
+<div class="chips" style="margin-top:28px;display:flex;gap:12px">{chips}</div>
+<h1 class="nt" style="font-size:66px;margin-top:22px;max-width:1040px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">{escape(title)}</h1></div>
+<style>.chip{{font-size:24px;font-weight:700;padding:8px 20px;border-radius:999px;border:1px solid rgba(91,194,245,.45);color:#A9D6FF;background:rgba(10,111,214,.18)}}</style>
+<div class="foot"><span class="cta">요약 · 실행 단계 · 적용 점검까지 3분 →</span><span class="brand">AX <b>REVIEW</b></span></div>""")
+
+
+def note_path(note_id: int) -> Path:
+    return OUT / f"note-{int(note_id)}.png"
+
+
+def note_fresh(note: dict) -> bool:
+    """노트 카드 파일이 있고, 노트의 게시일·생성 시각보다 새로우면 True (그보다 오래되면 다시 만든다)."""
+    p = note_path(note["id"])
+    if not p.is_file():
+        return False
+    stamps = []
+    for v in (note.get("published"), note.get("created_at")):
+        try:
+            stamps.append(datetime.fromisoformat(str(v)).timestamp())
+        except (TypeError, ValueError):
+            pass
+    return p.stat().st_mtime >= max(stamps, default=0)
+
+
+_pending: set[int] = set()
+_failed: dict[int, float] = {}  # 실패한 노트 id → 시각. 10분 동안 다시 시도하지 않는다 (브라우저가 없을 때 매 요청마다 띄우지 않게)
+_lock = threading.Lock()
+
+
+def render_note(note: dict) -> Path:
+    """노트 카드 1장 — make_all 과 같은 Playwright(Edge) 렌더링. 번들 브라우저가 있으면 그것을 먼저 쓴다."""
+    from playwright.sync_api import sync_playwright
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    path = note_path(note["id"])
+    tmp = path.with_suffix(".tmp.png")  # 다 그리기 전의 파일이 og:image 로 나가지 않게 임시 이름으로 쓴 뒤 바꾼다
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch()
+        except Exception:  # noqa: BLE001 - 번들 브라우저 미설치
+            browser = p.chromium.launch(channel="msedge")
+        page = browser.new_page(viewport={"width": 1200, "height": 630})
+        page.set_content(note_html(note))
+        page.wait_for_timeout(150)
+        page.screenshot(path=str(tmp))
+        browser.close()
+    tmp.replace(path)
+    return path
+
+
+def render_note_async(note: dict) -> None:
+    """브라우저 렌더링은 느릴 수 있어 백그라운드 스레드에서 만든다. 다 될 때까지는 호출 쪽이 기본 og.png 를 쓴다."""
+    nid = int(note["id"])
+    with _lock:
+        if nid in _pending or time.time() - _failed.get(nid, 0) < 600:
+            return
+        _pending.add(nid)
+
+    def run():
+        try:
+            render_note(note)
+            _failed.pop(nid, None)
+        except Exception:  # noqa: BLE001 - 실패해도 페이지는 og.png 로 계속 나간다
+            _failed[nid] = time.time()
+        finally:
+            with _lock:
+                _pending.discard(nid)
+
+    threading.Thread(target=run, name=f"og-note-{nid}", daemon=True).start()
 
 
 def type_path(code: str) -> Path:

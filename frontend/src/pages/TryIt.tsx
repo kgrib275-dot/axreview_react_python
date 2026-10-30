@@ -56,11 +56,18 @@ export default function TryIt() {
           )}
           <Link to="/today#map" className="try-tile try-people" onClick={() => track("try_click", "map")}>
             <div className="try-h"><span>어디서 참여하고 있을까?</span><em>참여 지도 →</em></div>
-            {/* 오늘 참여가 아직 없으면 최근 30일 수로 — '0명'이 첫 화면에 보이지 않게 */}
-            <div className="people-big">
-              <b>{(data.people.today || data.people.month).toLocaleString("ko-KR")}</b>
-              <span>명이 {data.people.today ? "오늘" : "최근 30일"} 참여{data.people.sample ? " (예시 포함)" : ""}</span>
-            </div>
+            {/* 오늘 참여가 아직 없으면 최근 30일 수로, 그것도 없으면(예시 데이터를 끈 직후) '0명' 대신 첫 참여 초대 — 숫자 0은 첫 화면에 보이지 않게 */}
+            {data.people.today || data.people.month ? (
+              <div className="people-big">
+                <b>{(data.people.today || data.people.month).toLocaleString("ko-KR")}</b>
+                <span>명이 {data.people.today ? "오늘" : "최근 30일"} 참여{data.people.sample ? " (예시 포함)" : ""}</span>
+              </div>
+            ) : (
+              <div className="people-big">
+                <b>첫 참여자</b>
+                <span>가 되어 보세요 — 퀴즈 하나면 지도에 표시됩니다</span>
+              </div>
+            )}
             {data.people.top.length > 0 && (
               <div className="people-top">
                 {data.people.top.map((c) => {

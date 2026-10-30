@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, get, post } from "../api";
-import { useDialogs } from "../components/Dialogs";
+import { SubscribeCTA, useDialogs } from "../components/Dialogs";
 import { Alert, Guide, useLoad } from "../components/ui";
 import { useMe } from "../me";
 import "./Ask.css";
@@ -177,6 +177,14 @@ export default function Ask() {
 
           {history.length > 0 && (
             <button className="btn sm" type="button" style={{ marginTop: 12 }} onClick={() => { setHistory([]); setWarn(null); }}>🧹 대화 지우기</button>
+          )}
+
+          {/* 첫 답을 본 뒤에만 — 쓸모를 느낀 다음에 구독을 권한다 (대화 목록 밖, 한 번만) */}
+          {history.some((t) => t.role === "assistant") && (
+            <>
+              <hr className="divider" />
+              <SubscribeCTA source="ask" headline="이런 사례를 매주 메일로 받아 보세요" sub="질문의 근거가 된 노트 같은 기업 AX 사례 5편과 한 주의 흐름 요약을 월요일 아침 메일로 보내 드립니다." />
+            </>
           )}
         </>
       )}

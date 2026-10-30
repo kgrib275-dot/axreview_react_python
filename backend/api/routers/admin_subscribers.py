@@ -51,9 +51,10 @@ def list_subscribers(q: str = "") -> dict:
 
 
 @router.get("/subscribers/csv")
-def subscribers_csv() -> Response:
+def subscribers_csv(request: Request) -> Response:
     df = pd.DataFrame(_sub_rows(), columns=[*_SUB_PUBLIC, "confirmed", "referrals"])
     body = db.csv_safe(df).to_csv(index=False).encode("utf-8-sig")
+    log_action(request, "구독자 CSV 내려받기", f"{len(df)}명")  # 개인정보(이메일) 일괄 반출은 누가 언제 했는지 남긴다
     return Response(body, media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="subscribers.csv"'})
 
 

@@ -53,6 +53,9 @@ PAGES: dict[str, tuple[str, str, str | None]] = {
 }
 
 
+NOINDEX = {"admin", "confirm", "unsubscribe", "refer"}
+
+
 def page_meta(path: str) -> tuple[str, str, str | None]:
     path = "/" + path.strip("/")
     return PAGES.get(path, (TITLE, DESCRIPTION, None))
@@ -62,10 +65,17 @@ def _block(site_url: str, path: str = "/") -> str:
     site = site_url.rstrip("/")
     title, desc, image = page_meta(path)
     img = f"{site}{image or '/app/static/og.png'}"
-    url = site + ("/" + path.strip("/") if path.strip("/") in {p.strip("/") for p in PAGES} else "/")
+    known = path.strip("/") in {p.strip("/") for p in PAGES}
+    url = site + ("/" + path.strip("/") if known else "/")
     t, d = escape(title), escape(desc)
+    first = path.strip("/").split("/")[0]
+    # canonical 은 페이지가 분명한 경로(홈·PAGES)에만 — 모르는 경로(404 등)에 홈을 canonical 로 주면 검색 엔진이 혼동한다
+    canonical = f'<link rel="canonical" href="{escape(url)}" />' if known or not first else ""
+    # 개인 화면·확인 링크는 색인하지 않는다 (robots.txt 와 같은 목록)
+    robots = '<meta name="robots" content="noindex" />' if first in NOINDEX else ""
     return f"""{_START}
     <meta name="description" content="{d}" />
+    {canonical}{robots}
     <meta name="theme-color" content="#050B18" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="AX Review" />

@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.deps import require_admin
 from api.routers.admin_jobs import log_action
-from pipeline import db, engage, gemini_keys, jobs, mailer, membership, privacy, scheduler, settings_store, warehouse
+from pipeline import claude_llm, db, engage, gemini_keys, jobs, llm, mailer, membership, privacy, scheduler, settings_store, warehouse
 
 router = APIRouter(prefix="/admin/ops", tags=["admin-ops"], dependencies=[Depends(require_admin)])
 
@@ -106,9 +106,15 @@ def _rows() -> list[dict]:
         model = jobs.config()["pipeline"]["gemini"].get("model", "gemini-2.5-flash")
         keys = len(gemini_keys.all_keys())
         healthy = gemini_keys.healthy_count(model)
-        add("AI", "Gemini 키", BAD if not keys else (WARN if gemini_keys.exhausted_today(model) else OK),
+        use_claude = claude_llm.provider() == "claude"  # 키가 있을 때만 'claude' — 없으면 Gemini 로 동작하므로 Gemini 행이 본체
+        if use_claude:
+            add("AI", "Claude 키", OK, f"설정됨 ({'관리 화면' if claude_llm.key_source() == 'admin' else '.env'}) · 모델 {claude_llm.model()}",
+                "채점·초안·주간 흐름·질문하기는 Claude 로 돕니다. 임베딩(의미 검색·벡터화)은 그대로 Gemini 키를 씁니다")
+        add("AI", "Gemini 키" + (" (임베딩용)" if use_claude else ""),
+            BAD if not keys and not use_claude else (WARN if not keys or gemini_keys.exhausted_today(model) else OK),
             f"{keys}개 중 정상 {healthy}개 (무료 등급: 키당 하루 약 20회)",
-            "한도 소진 시 질문하기는 관련 자료 목록으로 대신 답합니다. 사용량이 늘면 유료 등급 검토" if keys else ".env에 GEMINI_API_KEYS")
+            ("한도 소진 시 질문하기는 관련 자료 목록으로 대신 답합니다. 사용량이 늘면 유료 등급 검토" if keys else
+             ".env에 GEMINI_API_KEYS" + (" — 없으면 의미 검색·벡터화가 멈춥니다" if use_claude else "")))
         ask = cfg["ask"]
         add("AI", "질문하기 한도", OK if ask.get("global_daily", 40) <= 60 else WARN,
             f"무료 {ask['free_daily']}회 · 월 구독 {ask['member_daily']}회 · 무료 IP {ask['per_ip_daily']}회 · "
@@ -116,7 +122,7 @@ def _rows() -> list[dict]:
             "" if ask.get("global_daily", 40) <= 60 else "질문 1건에 Gemini 1~3회 — 무료 키 한도(키당 하루 약 20회)에 비해 큽니다")
         unscored = len(db.unscored_articles(14))
         add("AI", "미채점 기사 (14일)", OK if unscored < 50 else (WARN if unscored < 300 else BAD), f"{unscored}건",
-            "" if unscored < 50 else "Gemini 한도 소진 — 다음 수집 때 한 요청에 묶어 다시 채점합니다. 계속 쌓이면 키 추가·유료 등급 검토")
+            "" if unscored < 50 else f"{llm.provider_name()} 한도 소진·응답 파싱 실패 — 다음 수집 때 한 요청에 묶어 다시 채점합니다. 계속 쌓이면 작업 로그 확인·키 추가·유료 등급 검토")
 
         # ---------- 발송 ----------
         subs = conn.execute("SELECT COUNT(*) FROM subscribers WHERE active=1 AND confirmed_at IS NOT NULL").fetchone()[0]

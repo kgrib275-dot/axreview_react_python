@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hmac
 import os
+import threading
+import time
 import uuid
 from dataclasses import dataclass
 
@@ -18,6 +20,37 @@ from pipeline import engage, settings_store
 
 COOKIE = "axv"
 COOKIE_MAX_AGE = 365 * 24 * 3600
+
+# X-Admin-Token 을 틀리게 보낸 IP 별 실패 시각 — 10분에 10번 넘으면 그 IP 는 창이 지날 때까지 429.
+# 토큰이 길어 추측은 어렵지만, 공개 주소로 열려 있으니 무제한 시도는 막는다. 프로세스 메모리면 충분하다(재시작하면 비워짐).
+_TOKEN_FAIL_LIMIT, _TOKEN_FAIL_WINDOW = 10, 600
+_token_fails: dict[str, list[float]] = {}
+_token_lock = threading.Lock()
+
+
+def _recent_token_fails(ip: str) -> list[float]:
+    now = time.time()
+    with _token_lock:
+        kept = [t for t in _token_fails.get(ip, ()) if now - t < _TOKEN_FAIL_WINDOW]
+        if kept:
+            _token_fails[ip] = kept
+        else:
+            _token_fails.pop(ip, None)
+        if len(_token_fails) > 10000:  # 흩뿌려진 IP 로 메모리가 자라지 않게
+            _token_fails.clear()
+        return kept
+
+
+def _token_blocked(ip: str) -> bool:
+    return len(_recent_token_fails(ip)) >= _TOKEN_FAIL_LIMIT
+
+
+def _count_token_fail(request: Request, ip: str) -> None:
+    if getattr(request.state, "token_fail_counted", False):
+        return  # caller()와 require_admin 이 같은 요청에서 둘 다 is_admin 을 불러도 한 번만
+    request.state.token_fail_counted = True
+    with _token_lock:
+        _token_fails.setdefault(ip, []).append(time.time())
 
 
 @dataclass
@@ -38,8 +71,14 @@ def _client_ip(request: Request) -> tuple[str | None, bool]:
 
 def is_admin(request: Request) -> bool:
     token = os.environ.get("ADMIN_TOKEN", "").strip()
-    if token and hmac.compare_digest(request.headers.get("x-admin-token", "").encode(), token.encode()):  # 시간차로 토큰을 추측하지 못하게
-        return True
+    given = request.headers.get("x-admin-token", "")
+    if token and given:
+        ip = _client_ip(request)[0] or "?"
+        if _token_blocked(ip):
+            return False
+        if hmac.compare_digest(given.encode(), token.encode()):  # 시간차로 토큰을 추측하지 못하게
+            return True
+        _count_token_fail(request, ip)  # 헤더를 보냈는데 틀린 경우만 센다 — 로컬·등록 IP 의 헤더 없는 요청은 실패가 아니다
     raw = request.client.host if request.client else None
     return settings_store.is_admin_request(raw, {k: v for k, v in request.headers.items()})
 
@@ -61,6 +100,8 @@ def caller(request: Request, response: Response) -> Caller:
 
 
 def require_admin(request: Request) -> None:
+    if request.headers.get("x-admin-token") and _token_blocked(_client_ip(request)[0] or "?"):
+        raise HTTPException(status_code=429, detail="관리 토큰 오류가 잦아 잠시 차단되었습니다. 10분 뒤 다시 시도해 주세요.")
     if not is_admin(request):
         raise HTTPException(status_code=403, detail="관리자만 쓸 수 있습니다")
 

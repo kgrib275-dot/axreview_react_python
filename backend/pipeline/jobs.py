@@ -127,17 +127,21 @@ def collect(only_sources: list[str] | None = None) -> dict:
 
     scored = rescored = 0
     pool = llm.pool_from_env()
+    provider = llm.provider_name()
     batch = cfg.get("pipeline", {}).get("gemini", {}).get("score_batch_size", 150)
     # 이번 새 기사 + 지난번 못 매긴 기사를 한 요청에 묶는다 (무료 등급은 요청 횟수가 빠듯하다)
     pending = pending_items() if pool else []
     todo = filtered + pending
+    stats: dict = {}  # unparsed(응답 파싱 실패)·failed(호출 실패) — judge 가 경고 원인을 가려 쓴다
+    exhausted = False
     if todo and pool:
-        log.info("Gemini AX 관련도 채점: 새 기사 %d건 + 지난 미채점 %d건 → 요청 %d번 (최대 %d건씩)",
-                 len(filtered), len(pending), -(-len(todo) // batch), batch)
+        log.info("%s AX 관련도 채점: 새 기사 %d건 + 지난 미채점 %d건 → 요청 %d번 (최대 %d건씩)",
+                 provider, len(filtered), len(pending), -(-len(todo) // batch), batch)
         try:
-            llm.score_items(todo, pool, _model(cfg, "score_model"), batch)
+            llm.score_items(todo, pool, _model(cfg, "score_model"), batch, stats)
         except llm.AllKeysExhausted:
-            log.warning("Gemini 채점 불가 — 점수 없이 저장, 다음 수집 때 다시 채점")
+            exhausted = True
+            log.warning("%s 채점 불가 (한도 소진·호출 실패) — 점수 없이 저장, 다음 수집 때 다시 채점", provider)
         scored = sum(1 for it in filtered if it.llm_score)
         done = [it for it in pending if it.llm_score]
         db.update_article_scores([(it.url_hash, it.summary_ko, it.llm_score) for it in done])
@@ -148,7 +152,8 @@ def collect(only_sources: list[str] | None = None) -> dict:
     return {
         "rescored": rescored,
         "collected": len(items), "new": len(fresh), "filtered": len(filtered), "scored": scored,
-        "gemini": bool(pool), "per_source": per_source, "source_errors": errors,
+        "gemini": bool(pool), "provider": provider, "unparsed": stats.get("unparsed", 0), "exhausted": exhausted,
+        "per_source": per_source, "source_errors": errors,
     }
 
 
@@ -157,7 +162,7 @@ def collect(only_sources: list[str] | None = None) -> dict:
 def draft(per_run: int | None = None, min_score: int | None = None, hashes: list[str] | None = None) -> dict:
     pool = llm.pool_from_env()
     if not pool:
-        raise RuntimeError("GEMINI_API_KEYS가 없어 노트 초안을 쓸 수 없습니다")
+        raise RuntimeError("AI 모델 키(GEMINI_API_KEYS 또는 Claude)가 없어 노트 초안을 쓸 수 없습니다")
     cfg = config()
     if hashes:
         targets = [a for h in hashes if (a := db.article(h))]
@@ -215,8 +220,14 @@ def weekly(target_day: date | None = None, auto_publish: bool | None = None) -> 
     """target_day가 속한 주(월~일)의 게시 노트로 주간 흐름을 쓴다. 기본은 지난주."""
     pool = llm.pool_from_env()
     if not pool:
-        raise RuntimeError("GEMINI_API_KEYS가 없어 주간 흐름을 쓸 수 없습니다")
+        raise RuntimeError("AI 모델 키(GEMINI_API_KEYS 또는 Claude)가 없어 주간 흐름을 쓸 수 없습니다")
     monday, sunday = week_bounds(target_day or date.today() - timedelta(days=7))
+    # 같은 주의 흐름(초안이든 게시든)이 이미 있으면 다시 만들지 않는다 — 놓친 작업 따라잡기·수동 실행이 겹치면 같은 주가 두 번 생겼다
+    dup = next((i for i in db.issues(None) if i.get("week_start") == monday.isoformat()), None)
+    if dup:
+        log.info("%s 주간 흐름이 이미 있어(#%d, %s) 건너뜁니다", week_label(monday), dup["id"], dup["status"])
+        return {"issue_id": dup["id"], "week": week_label(monday), "notes": 0, "published": dup["status"] == "published",
+                "pdf": None, "skipped": True}
     notes = db.notes_published_between(monday.isoformat(), sunday.isoformat())
     if not notes:
         raise RuntimeError(f"{monday}~{sunday}에 게시된 노트가 없습니다")
@@ -226,7 +237,7 @@ def weekly(target_day: date | None = None, auto_publish: bool | None = None) -> 
     prev_headline = f"{prev['headline_em']} {prev['headline']}".strip() if prev else ""
     log.info("%s 게시 노트 %d편으로 주간 흐름 작성", range_, len(notes))
     text = llm.write_weekly(notes[:30], range_, prev_headline, pool, _model(config(), "weekly_model"))
-    log.info("Gemini 응답: %s %s", text["headline_em"], text["headline"][:60])
+    log.info("%s 응답: %s %s", llm.provider_name(), text["headline_em"], text["headline"][:60])
     if auto_publish is None:
         auto_publish = settings_store.load()["weekly"]["auto_publish"]
     issue_id = db.add_issue(week_label(monday), range_, text["headline_em"], text["headline"], text["body"],
@@ -248,7 +259,8 @@ def newsletter_content() -> tuple[dict | None, list[dict], str]:
     published = db.issues("published")
     issue = published[-1] if published else None
     since = (db.last_newsletter_at() or "")[:10]
-    notes = [n for n in db.notes("published") if n["published"] > since][:10] if since else db.notes()[:10]
+    # 노트의 published 는 날짜뿐이라, 발송 당일 늦게 게시된 노트가 빠지지 않게 >= 로 본다 (당일 먼저 실린 노트가 한 번 더 실릴 수는 있다)
+    notes = [n for n in db.notes("published") if n["published"] >= since][:10] if since else db.notes()[:10]
     subject = f"[AX Review] {issue['week']} · {issue['headline_em'] or issue['headline']}" if issue \
         else f"[AX Review] 새 노트 {len(notes)}편"
     return issue, notes, subject
@@ -266,8 +278,10 @@ def newsletter(trigger: str = "수동", only_to: str | None = None) -> dict:
         recipients = [(s["email"], s["token"]) for s in subs]
         if not recipients:
             raise RuntimeError("확인된 구독자가 없습니다")
-    # 같은 호를 다시 보내면(중간 실패 후 재실행) 이미 받은 사람은 건너뛴다
-    send_key = subject
+    # 같은 호를 다시 보내면(중간 실패 후 재실행) 이미 받은 사람은 건너뛴다.
+    # 키에 발송 주(KST 월요일)를 넣는다 — 제목만 쓰면 새 주간 흐름이 없는 주는 제목이 같아 조용히 0명에게 나갔다.
+    monday, _ = week_bounds(datetime.now(db.KST).date())
+    send_key = f"{monday.isoformat()}|{subject}"
     hash_of = lambda e: hashlib.sha256(e.lower().encode()).hexdigest()[:32]  # noqa: E731
     if not only_to:
         done = db.already_sent(send_key)
@@ -402,8 +416,14 @@ def judge(kind: str, result: dict) -> tuple[bool, list[str]]:
         if errs:
             warn.append(f"소스 {len(errs)}곳 실패")
         unscored = result.get("filtered", 0) - result.get("scored", 0)
+        name = result.get("provider") or "Gemini"
         if result.get("gemini") and result.get("filtered") and not result.get("scored"):
-            warn.append(f"Gemini 채점 0건 (미채점 {unscored}건, 한도 소진 가능성)")
+            # 원인을 가려 적는다 — 파싱 실패는 키를 늘려도 해결되지 않고, 한도 소진은 프롬프트를 고쳐도 소용없다
+            cause = ("채점 응답 파싱 실패" if result.get("unparsed") else
+                     "한도 소진" if result.get("exhausted") else "원인 불명 — 작업 로그 확인")
+            warn.append(f"{name} 채점 0건 (미채점 {unscored}건, {cause})")
+        elif result.get("unparsed"):
+            warn.append(f"{name} 채점 응답 파싱 실패 {result['unparsed']}건")
         return not (n_src and len(errs) >= n_src * 0.5), warn  # 절반 이상 소스가 실패하면 실패
     if kind == "newsletter" and result.get("failed"):
         sent = result.get("sent", 0)
@@ -436,8 +456,22 @@ def run(kind: str, trigger: str = "수동", **kwargs) -> dict:
     elif warn:
         alerts.job_warning(kind, "; ".join(warn))
     if kind in _SYNC_AFTER and settings_store.load()["warehouse"]["auto_sync"] and warehouse.is_configured():
-        start("warehouse", trigger=f"자동({KIND_LABELS[kind]} 후)")
+        if warehouse.breaker_tripped():
+            _log_breaker_once()  # 무료 일일 한도에 걸린 날은 자동 적재를 쉰다 (수동 적재는 그대로 된다)
+        else:
+            start("warehouse", trigger=f"자동({KIND_LABELS[kind]} 후)")
     return result
+
+
+_breaker_logged = ""  # 자동 적재 건너뜀 로그를 날짜당 한 줄만 남기기 위한 마지막 기록 날짜(KST)
+
+
+def _log_breaker_once() -> None:
+    global _breaker_logged
+    today = datetime.now(db.KST).strftime("%Y-%m-%d")
+    if _breaker_logged != today:
+        _breaker_logged = today
+        log.warning("Databricks 무료 일일 한도 소진 — 오늘(%s KST)은 작업 후 자동 적재를 건너뜁니다 (관리 > Databricks 수동 적재는 가능)", today)
 
 
 def start(kind: str, trigger: str = "수동", **kwargs) -> bool:

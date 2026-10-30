@@ -119,5 +119,5 @@ export function ShareReveal({ content, path, params = {}, title, note, text, ima
       }}>🔗 결과 공유하기</button>
     );
   }
-  return <ShareBar note={note || "링크를 받은 사람은 내 결과를 보고 바로 테스트할 수 있어요"} url={url} title={title} text={text} image={image} imageName={`axreview-${content}.png`} />;
+  return <ShareBar content={content} note={note || "링크를 받은 사람은 내 결과를 보고 바로 테스트할 수 있어요"} url={url} title={title} text={text} image={image} imageName={`axreview-${content}.png`} />;
 }

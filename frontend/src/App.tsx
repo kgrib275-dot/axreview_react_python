@@ -22,6 +22,7 @@ const Confirm = L(() => import("./pages/Confirm"));
 const Unsubscribe = L(() => import("./pages/Unsubscribe"));
 const Privacy = L(() => import("./pages/Privacy"));
 const Admin = L(() => import("./pages/admin/AdminApp"));
+const NotFound = L(() => import("./pages/NotFound"));
 
 export default function App() {
   return (
@@ -47,7 +48,8 @@ export default function App() {
             <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/admin/*" element={<Admin />} />
-            <Route path="*" element={<Home />} />
+            {/* 없는 경로 — 라우트를 추가하면 api/main.py _APP_ROUTES 에도 넣어야 서버가 404 를 주지 않는다 */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </Layout>

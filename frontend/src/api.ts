@@ -61,6 +61,6 @@ export const put = <T = unknown>(path: string, json?: unknown) => api<T>(path, {
 export const del = <T = unknown>(path: string, json?: unknown) => api<T>(path, { method: "DELETE", json });
 
 /** 참여 기록 (공유·공유 유입·구독 창 열기 등). 실패해도 화면을 막지 않는다. */
-export function track(kind: string, item = "", value = ""): void {
-  post("engage", { kind, item, value }).catch(() => undefined);
+export function track(kind: string, item = "", value = "", extra?: Record<string, unknown>): void {
+  post("engage", extra ? { kind, item, value, extra } : { kind, item, value }).catch(() => undefined);
 }

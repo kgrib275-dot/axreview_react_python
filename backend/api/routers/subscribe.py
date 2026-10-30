@@ -19,7 +19,7 @@ from pipeline import db, email_check, engage, industry, mailer, referral, report
 router = APIRouter(tags=["subscribe"])
 
 _TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
-SOURCES = {"header", "sticky_bar", "home_hero", "home_cta", "note_detail", "today", "type_test", "terms", "diagnosis", "habit", "career",
+SOURCES = {"header", "sticky_bar", "home_hero", "home_cta", "note_detail", "today", "type_test", "terms", "diagnosis", "habit", "career", "ask",
            "lab", "letter", "about", "refer", "notes"}
 
 

@@ -723,6 +723,9 @@ def access_count_today_all(action: str) -> int:
 # 보관 기간 (개인정보 처리방침 /privacy·pipeline/privacy.py가 이 값을 그대로 쓴다)
 RETENTION_DAYS = {"access_logs": 90, "engagements": 395, "visitor_state": 395, "profiles": 395, "contacts": 365,
                   "unsubscribed": 30, "unconfirmed": 7, "members_expired": 180, "newsletter_sends": 365}
+# 개인정보가 아닌 운영 데이터의 보관 기간 — RETENTION_DAYS 에 섞으면 처리방침 스냅샷(privacy.snapshot)이 바뀌어
+# '새 버전 공지' 경고가 뜨므로 따로 둔다.
+DATA_RETENTION_DAYS = {"articles": 180, "run_logs": 180}
 
 
 def purge_expired() -> dict[str, int]:
@@ -730,7 +733,8 @@ def purge_expired() -> dict[str, int]:
     now = datetime.now()
     ago = lambda d: (now - timedelta(days=d)).isoformat(timespec="seconds")  # noqa: E731
     kst_ago = lambda d: (datetime.now(KST) - timedelta(days=d)).isoformat(timespec="seconds")  # noqa: E731
-    R = RETENTION_DAYS
+    utc_ago = lambda d: (datetime.now(timezone.utc) - timedelta(days=d)).isoformat(timespec="seconds")  # noqa: E731
+    R, D = RETENTION_DAYS, DATA_RETENTION_DAYS
     stmts = {
         "접속 기록": ("DELETE FROM access_logs WHERE created_at < ?", (ago(R["access_logs"]),)),
         "참여 기록": ("DELETE FROM engagements WHERE created_at < ?", (kst_ago(R["engagements"]),)),
@@ -743,6 +747,13 @@ def purge_expired() -> dict[str, int]:
         "확인 안 된 구독 신청": ("DELETE FROM subscribers WHERE confirmed_at IS NULL AND created_at < ?", (ago(R["unconfirmed"]),)),
         "끝난 월 구독": ("DELETE FROM members WHERE expires < ?", (ago(R["members_expired"])[:10],)),
         "발송 기록": ("DELETE FROM newsletter_sends WHERE sent_at < ?", (ago(R["newsletter_sends"]),)),
+        # 오래된 수집 기사: 노트의 원문(article_hash)이 아니고, 그날(KST) 데일리 아카이브가 확정된 것만 — 집계는 아카이브에 남는다.
+        # collected_at 은 UTC 저장이라 기준 시각도 UTC, 아카이브 날짜 대조는 +9시간.
+        "오래된 수집 기사": ("DELETE FROM articles WHERE collected_at < ?"
+                     " AND NOT EXISTS (SELECT 1 FROM notes n WHERE n.article_hash = articles.url_hash)"
+                     " AND EXISTS (SELECT 1 FROM article_archives ar WHERE ar.date = date(articles.collected_at, '+9 hours'))",
+                     (utc_ago(D["articles"]),)),
+        "오래된 작업 기록": ("DELETE FROM run_logs WHERE started_at < ?", (ago(D["run_logs"]),)),
     }
     out = {}
     conn = connect()

@@ -197,7 +197,7 @@ export default function Diagnosis() {
             })}
           </div>
 
-          <ShareBar note={`결과 코드 ${code}`} url={res?.share?.url || `/s/d?a=${code}`} title={res?.share?.title || `우리 조직 AX 준비도: ${name} 단계`}
+          <ShareBar content="diagnosis" note={`결과 코드 ${code}`} url={res?.share?.url || `/s/d?a=${code}`} title={res?.share?.title || `우리 조직 AX 준비도: ${name} 단계`}
             text={res?.share?.text || `AX 준비도 자가진단 결과 우리 조직은 '${name}' 단계(${Math.round(total)}점)입니다. 12문항·3분이면 됩니다.`}
             image={res?.share?.image || `/app/static/og/diag-${lvlIdx}.png`} imageName="axreview-self-check.png" />
           <div className="btn-row" style={{ margin: "10px 0" }}>

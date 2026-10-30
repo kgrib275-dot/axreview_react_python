@@ -86,6 +86,12 @@ def pool_from_env() -> GeminiKeyPool | ClaudePool | None:
     return GeminiKeyPool(keys) if keys else None
 
 
+def provider_name() -> str:
+    """로그·경보 문구용 공급자 이름 ('Claude'/'Gemini') — 함수 이름은 그대로 두고 문구만 실제 공급자에 맞춘다."""
+    from . import claude_llm
+    return "Claude" if claude_llm.provider() == "claude" else "Gemini"
+
+
 def _parse_json(raw: str, kind: type):
     pattern = r"\[.*\]" if kind is list else r"\{.*\}"
     match = re.search(pattern, raw, re.DOTALL)
@@ -114,20 +120,30 @@ SCORE_PROMPT = """너는 기업 AI 전환(AX)을 다루는 큐레이션 매체�
 EXCERPT_CHARS = 240  # 채점용 발췌 길이 — 제목과 첫 두세 문장이면 관련도 판단에 충분하다
 
 
-def _score_batch(batch, pool: GeminiKeyPool, model: str) -> int:
+def _score_batch(batch, pool: GeminiKeyPool, model: str, split: bool = True) -> tuple[int, int, int]:
+    """(채점 건수, 응답 파싱 실패로 못 매긴 건수, 호출 자체가 실패한 건수).
+    세 값을 따로 세는 이유: 수집 작업 경고에서 '한도 소진'과 '응답 파싱 실패'를 구분해 보여 주기 위해."""
     # URL(평균 100자 안팎)을 입력·출력에 두 번 싣지 않고 번호로 주고받는다.
     articles_json = json.dumps(
         [{"i": n, "t": it.title, "e": " ".join(it.excerpt.split())[:EXCERPT_CHARS]} for n, it in enumerate(batch)],
         ensure_ascii=False, separators=(",", ":"))
     try:
         raw = pool.generate(model, SCORE_PROMPT.format(articles_json=articles_json), json_mode=True, thinking_budget=0)
-        by_i = {int(r["i"]): r for r in _parse_json(raw, list) if str(r.get("i", "")).isdigit()}
     except AllKeysExhausted:
-        return 0  # 남은 기사는 다음 수집 채점 요청에 함께 실린다 (jobs.pending_items)
-    except (json.JSONDecodeError, TypeError, KeyError) as e:
-        # 배치 하나가 깨져도 나머지는 계속 처리한다 (AI_NEWS와 같은 방침).
-        log.warning("Gemini 채점 배치 파싱 실패 (%d건 건너뜀): %s", len(batch), e)
-        return 0
+        return 0, 0, len(batch)  # 남은 기사는 다음 수집 채점 요청에 함께 실린다 (jobs.pending_items)
+    try:
+        by_i = {int(r["i"]): r for r in _parse_json(raw, list) if str(r.get("i", "")).isdigit()}
+    except (json.JSONDecodeError, TypeError, KeyError, ValueError, AttributeError) as e:
+        # 원인을 로그에서 볼 수 있게 응답 앞부분을 남긴다 (긴 배열이 중간에 잘리거나 설명문이 섞인 경우가 대부분).
+        log.warning("%s 채점 배치 파싱 실패 (%d건): %s · 응답 앞부분 %r", provider_name(), len(batch), e, raw[:200])
+        if split and len(batch) > 1:
+            # 반으로 나눠 한 번만 다시 요청한다(각각 새 호출) — 출력이 짧아지면 잘림·형식 오류가 대개 사라진다.
+            mid = len(batch) // 2
+            a = _score_batch(batch[:mid], pool, model, split=False)
+            b = _score_batch(batch[mid:], pool, model, split=False)
+            return a[0] + b[0], a[1] + b[1], a[2] + b[2]
+        log.warning("채점 배치 %d건 건너뜀 (다음 수집 때 다시 채점)", len(batch))  # 배치 하나가 깨져도 나머지는 계속 (AI_NEWS와 같은 방침)
+        return 0, len(batch), 0
     scored = 0
     for n, it in enumerate(batch):
         r = by_i.get(n)
@@ -136,11 +152,12 @@ def _score_batch(batch, pool: GeminiKeyPool, model: str) -> int:
             it.llm_score = max(0, min(5, int(r.get("s", 0) or 0)))
             scored += 1
     log.info("채점 묶음 완료: %d/%d건", scored, len(batch))
-    return scored
+    return scored, 0, 0
 
 
-def score_items(items, pool: GeminiKeyPool, model: str, batch_size: int = 150) -> int:
+def score_items(items, pool: GeminiKeyPool, model: str, batch_size: int = 150, stats: dict | None = None) -> int:
     """items(Item 목록)에 summary_ko/llm_score를 채운다. 채점된 건수를 반환. 모든 키가 소진되면 AllKeysExhausted.
+    stats(dict)를 주면 'unparsed'(파싱 실패 건수)·'failed'(호출 실패 건수)를 채운다 — 작업 경고 문구용.
 
     무료 등급은 요청 '횟수'가 하루 20회 안팎이라, 수집 한 번의 기사를 요청 한 번에 묶는다(batch_size건까지).
     그보다 많을 때만 나눠서 정상 키 수만큼 병렬로 보낸다."""
@@ -148,9 +165,14 @@ def score_items(items, pool: GeminiKeyPool, model: str, batch_size: int = 150) -
     if not batches:
         return 0
     with ThreadPoolExecutor(max_workers=pool.workers(model)) as ex:
-        scored = sum(ex.map(lambda b: _score_batch(b, pool, model), batches))
-    if not scored and gemini_keys.exhausted_today(model):
-        raise AllKeysExhausted(f"no usable Gemini key for {model}")
+        results = list(ex.map(lambda b: _score_batch(b, pool, model), batches))
+    scored = sum(r[0] for r in results)
+    unparsed, failed = sum(r[1] for r in results), sum(r[2] for r in results)
+    if stats is not None:
+        stats.update(unparsed=unparsed, failed=failed)
+    # 호출이 전부 실패했거나(Claude 포함) Gemini 키가 오늘 모두 소진된 경우 — 파싱 실패는 한도 소진이 아니므로 올리지 않는다
+    if not scored and ((failed and not unparsed) or gemini_keys.exhausted_today(model)):
+        raise AllKeysExhausted(f"no usable {provider_name()} key for {model}")
     return scored
 
 

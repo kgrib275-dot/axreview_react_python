@@ -180,7 +180,15 @@ async def spa(path: str):
     html = _index_html()
     if html is None:
         return HTMLResponse("<h1>AX Review</h1><p>프론트엔드를 아직 빌드하지 않았습니다: <code>cd frontend && npm run build</code></p>", status_code=503)
-    return HTMLResponse(og_meta.render(html, path), headers={"Cache-Control": "no-cache"})
+    # 앱에 없는 경로는 index.html 을 그대로 주되 404 로 — React 가 '페이지 없음' 화면을 그리고 검색 엔진은 soft 404 로 세지 않는다
+    status = 200 if path.split("/", 1)[0] in _APP_ROUTES else 404
+    return HTMLResponse(og_meta.render(html, path), status_code=status, headers={"Cache-Control": "no-cache"})
+
+
+# App.tsx 가 선언한 라우트의 첫 경로 조각 ("" = 홈). og_meta.PAGES 에 있는 것은 자동으로 들어간다.
+_APP_ROUTES = {p.strip("/") for p in og_meta.PAGES} | {
+    "", "home", "notes", "today", "lab", "ask", "about", "type", "terms", "diagnosis", "habit", "career",
+    "letter", "refer", "confirm", "unsubscribe", "privacy", "admin"}
 
 
 _index: dict = {}

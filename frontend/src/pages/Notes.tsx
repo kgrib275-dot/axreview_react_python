@@ -28,6 +28,16 @@ const SORTS: [string, string][] = [["latest", "최신순"], ["popular", "인기�
 
 const asList = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
+/** 브라우저 탭·북마크·공유 제목. 화면을 떠나면 이전 제목으로 되돌린다 (SPA 라 서버가 넣은 <title>이 그대로 남지 않게). */
+function useTitle(title: string | undefined) {
+  useEffect(() => {
+    if (!title) return;
+    const prev = document.title;
+    document.title = title;
+    return () => { document.title = prev; };
+  }, [title]);
+}
+
 export default function NotesPage() {
   const [params] = useSearchParams();
   const id = params.get("id");
@@ -41,6 +51,7 @@ function NoteDetail({ id }: { id: string }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState(false);
   const [pendingJump, setPendingJump] = useState<string | null>(null);
+  useTitle(data?.note.title ? `${data.note.title} — AX Review` : undefined);
 
   useEffect(() => { window.scrollTo(0, 0); setMore(false); }, [id]);
   useEffect(() => {
@@ -91,7 +102,7 @@ function NoteDetail({ id }: { id: string }) {
         <span className="nt-read">{cut > 0 ? `핵심 ${headMin}분 · 전체 ${minutes}분` : `약 ${minutes}분 읽기`}</span>
         {toc.map((h) => <button key={h} type="button" className="toc" onClick={() => jump(h)}>{h}</button>)}
       </div>
-      <ShareBar url={data.share_url} title={n.title} />
+      <ShareBar content="note" url={data.share_url} title={n.title} />
       <hr className="divider" />
       <div ref={bodyRef} className="note-body" dangerouslySetInnerHTML={{ __html: head }} />
       {cut > 0 && !more && (
@@ -127,6 +138,7 @@ function NoteList() {
   const [params] = useSearchParams();
   const [bm, toggleBm] = useBookmarks();
   const [only, setOnly] = useState(false);
+  useTitle("AX 노트 — AX Review");
 
   // 필터 값: 방문자 상태 → 없으면 기본값. 업종 기본값은 구독할 때 고른 업종(pref_inds).
   const q = typeof state.q === "string" ? state.q : "";

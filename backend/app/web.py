@@ -128,8 +128,20 @@ def note_page(request: Request) -> Response:
 <div class="src">원문: <a href="{escape(n['url'])}" rel="nofollow noopener" target="_blank">{escape(n['source'] or n['url'])}</a>
 {f'<br>태그: {escape(tags)}' if tags else ''}</div>
 <p><a class="btn" href="/notes?id={n['id']}">AX Review에서 이어 보기 →</a> &nbsp; <a href="/n/">전체 노트</a></p>"""
-    return _page(f"{n['title']} | AX Review", n["summary"][:150], url, body, f"{site}/app/static/og.png",
+    return _page(f"{n['title']} | AX Review", n["summary"][:150], url, body, _note_og(site, n),
                  f'<script type="application/ld+json">{ld}</script>')
+
+
+def _note_og(site: str, n: dict) -> str:
+    """노트별 og:image — 카드가 있으면 그것을, 없으면 백그라운드로 만들기 시작하고 그동안은 기본 og.png 를 준다."""
+    try:
+        from app import og_cards
+        if og_cards.note_fresh(n):
+            return f"{site}/app/static/og/{og_cards.note_path(n['id']).name}"
+        og_cards.render_note_async(n)
+    except Exception:  # noqa: BLE001 - 카드 생성에 문제가 있어도 미리보기 자체는 나가야 한다
+        pass
+    return f"{site}/app/static/og.png"
 
 
 def _json_str(s: str) -> str:
@@ -149,9 +161,11 @@ def note_index(request: Request) -> Response:
 
 def sitemap(request: Request) -> Response:
     site = _site(request)
-    urls = [(f"{site}/", None), (f"{site}/n/", None), (f"{site}/letter", None), (f"{site}/about", None),
+    # 공개 화면만 (App.tsx 라우트 중 admin·confirm·unsubscribe·refer 제외)
+    urls = [(f"{site}/", None), (f"{site}/n/", None), (f"{site}/notes", None), (f"{site}/today", None),
+            (f"{site}/lab", None), (f"{site}/ask", None), (f"{site}/letter", None), (f"{site}/about", None),
             (f"{site}/type", None), (f"{site}/diagnosis", None), (f"{site}/terms", None),
-            (f"{site}/habit", None), (f"{site}/career", None)]
+            (f"{site}/habit", None), (f"{site}/career", None), (f"{site}/privacy", None)]
     urls += [(f"{site}/n/{n['id']}", n["published"]) for n in db.notes("published")]
     xml = "".join(f"<url><loc>{escape(u)}</loc>" + (f"<lastmod>{escape(d)}</lastmod>" if d else "") + "</url>" for u, d in urls)
     return Response(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{xml}</urlset>',
@@ -159,7 +173,7 @@ def sitemap(request: Request) -> Response:
 
 
 def robots(request: Request) -> Response:
-    return PlainTextResponse("User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /_stcore/\nDisallow: /r/\nDisallow: /refer\nDisallow: /unsubscribe\nDisallow: /confirm\n"
+    return PlainTextResponse("User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /r/\nDisallow: /refer\nDisallow: /unsubscribe\nDisallow: /confirm\n"
                              f"Sitemap: {_site(request)}/sitemap.xml\n")
 
 

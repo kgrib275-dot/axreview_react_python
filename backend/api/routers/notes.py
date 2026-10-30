@@ -137,5 +137,5 @@ def note_detail(note_id: str, request: Request, c: Caller = CallerDep) -> dict:
         related = [note_card(r, similarity=round(float(r.get("similarity", 0)), 4))
                    for r in _cached(_rel_cache, n["id"], lambda: knowledge.related_notes(n["id"], k=3))]
     site = (os.environ.get("SITE_URL") or str(request.base_url)).rstrip("/")
-    return {"note": note, "prev": prev, "next": nxt, "related": related, "share_url": f"{site}/notes?id={n['id']}"}
+    return {"note": note, "prev": prev, "next": nxt, "related": related, "share_url": f"{site}/n/{n['id']}"}  # 서버 렌더링 주소 — 메신저 미리보기에 노트별 제목·설명·카드가 뜬다 (app/web.py)
 

@@ -92,9 +92,40 @@ def _connect():
     if problems(cfg):
         raise NotConfigured(", ".join(problems(cfg)))
     from databricks import sql as dbsql
-    # 시간 제한: 접속이 걸리면 적재 작업이 '실행 중'으로 남아 이후 자동 적재가 모두 건너뛰어진다
+    # 시간 제한: 접속이 걸리면 적재 작업이 '실행 중'으로 남아 이후 자동 적재가 모두 건너뛰어진다.
+    # 오늘 이미 무료 일일 한도에 걸렸으면(수동 재시도) 같은 오류를 3번 받으며 기다리지 않게 한 번만 시도한다.
     return dbsql.connect(server_hostname=cfg["host"], http_path=cfg["http_path"], access_token=cfg["token"],
-                         _socket_timeout=120, _retry_stop_after_attempts_count=3)
+                         _socket_timeout=120, _retry_stop_after_attempts_count=1 if breaker_tripped() else 3)
+
+
+# ───────────────────────── 무료 일일 한도 차단기 ─────────────────────────
+# Databricks Free Edition 은 하루 사용량이 차면 "free daily limit" 오류를 낸다. 그날은 어떤 적재도 같은 오류라
+# 작업(수집·초안·…)마다 붙는 자동 적재가 헛돌지 않게 KST 날짜를 app_meta 에 적어 두고 자동 적재만 쉰다.
+DAILY_LIMIT_MARK = "free daily limit"
+_BREAKER_KEY = "warehouse_daily_limit"
+
+
+def _kst_today() -> str:
+    return datetime.now(db.KST).strftime("%Y-%m-%d")
+
+
+# 그날 다시 시도해도 소용없는 오류들 — 무료 일일 한도, 워크스페이스 설정으로 웨어하우스를 못 켜는 경우(2026-10-30 09:00 실제 발생)
+_BLOCKING_MARKS = (DAILY_LIMIT_MARK, "cannot start warehouse", "serverless compute")
+
+
+def is_daily_limit(message: str) -> bool:
+    m = (message or "").lower()
+    return any(k in m for k in _BLOCKING_MARKS)
+
+
+def trip_breaker(message: str) -> None:
+    db.set_meta(_BREAKER_KEY, _kst_today())
+    log.warning("Databricks 무료 일일 한도 소진 — 오늘(%s KST) 자동 적재를 멈춥니다: %s", _kst_today(), (message or "")[:160])
+
+
+def breaker_tripped() -> bool:
+    """오늘(KST) 한도 오류가 있었으면 True — jobs.run 이 자동 적재를 건너뛴다. 수동 적재는 이 값을 보지 않는다."""
+    return db.get_meta(_BREAKER_KEY) == _kst_today()
 
 
 # ───────────────────────── 로컬 쪽 ─────────────────────────
@@ -251,7 +282,7 @@ def sync(tables: list[str] | None = None) -> dict:
     result: dict = {"target": target(), "tables": {}, "failed": {}}
     local = _local()
     try:
-        with _connect() as conn, conn.cursor() as cur:
+        with _BreakerGuard(), _connect() as conn, conn.cursor() as cur:
             log.info("Databricks 접속됨 — 스키마 확인")
             cur.execute(f"CREATE SCHEMA IF NOT EXISTS {fq_schema}")
             for table in tables or list(TABLES):
@@ -281,6 +312,21 @@ def sync(tables: list[str] | None = None) -> dict:
                 except Exception as e:  # noqa: BLE001 - 테이블별로 격리
                     result["failed"][table] = f"{type(e).__name__}: {e}"[:300]
                     log.warning("✗ %s 실패: %s", table, result["failed"][table][:160])
+                    if is_daily_limit(result["failed"][table]):
+                        trip_breaker(result["failed"][table])
+                        break  # 남은 표도 같은 오류 — 테이블마다 다시 쳐 보지 않는다
     finally:
         local.close()
     return result
+
+
+class _BreakerGuard:
+    """접속·스키마 단계에서 한도 오류가 나도 차단기를 올린다 (테이블 루프 밖이라 위 except 에 걸리지 않는다)."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc is not None and is_daily_limit(str(exc)):
+            trip_breaker(str(exc))
+        return False

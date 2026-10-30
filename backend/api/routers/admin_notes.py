@@ -72,9 +72,9 @@ def get_note(note_id: int) -> dict:
 
 @router.post("")
 def create_note(request: Request, body: dict[str, Any]) -> dict:
-    """직접 작성. body.publish=true 면 바로 게시(+벡터화 시작)."""
-    data = _clean(body)
-    publish = bool(body.get("publish"))
+    """직접 작성. body.publish=true 또는 body.status='published' 면 바로 게시(+벡터화 시작) — 화면은 status 로 보낸다."""
+    data = _clean(body)  # 제목·카드 요약 필수 등 /publish 가 쓰는 것과 같은 검증
+    publish = bool(body.get("publish")) or body.get("status") == "published"
     note_id = db.add_note(**data, status="published" if publish else "draft")
     log_action(request, "노트 게시" if publish else "노트 저장", data["title"])
     if publish:

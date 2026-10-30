@@ -56,7 +56,7 @@ export default function ReferPage() {
       </div>
       <pre className="box" style={{ margin: "8px 0", padding: "12px 14px", fontFamily: "var(--f-mono)", fontSize: ".9rem", overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{data.link}</pre>
       <ShareBar
-        note="이 링크로 구독하면 추천으로 셉니다" url={data.link} title="AX Review — 기업 AX 노트를 매주 메일로"
+        content="refer" note="이 링크로 구독하면 추천으로 셉니다" url={data.link} title="AX Review — 기업 AX 노트를 매주 메일로"
         text="기업 AI 전환(AX) 사례를 매주 한 번 정리해 보내 주는 뉴스레터인데, 실무에 꽤 도움이 됩니다. 구독은 무료예요."
       />
 

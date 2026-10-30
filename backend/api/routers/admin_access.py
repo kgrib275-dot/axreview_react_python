@@ -1,6 +1,7 @@
 """관리 > 관리자·접속 — 관리자 IP 등록·삭제, 접속 기록(관리 작업·질문하기·페이지 조회·전체), 관리자 행동 기록 (app_pages/admin/access.py)."""
 from __future__ import annotations
 
+import ipaddress
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -37,6 +38,10 @@ def add_admin_ip(request: Request, body: dict[str, Any]) -> dict:
     ip = (body.get("ip") or "").strip()[:64]
     if not (label and ip):
         raise HTTPException(400, "이름과 IP 를 입력하세요")
+    try:
+        ip = str(ipaddress.ip_address(ip))  # 오타·CIDR·호스트명은 등록해도 영원히 맞지 않는다 — 정규화된 표기로 저장
+    except ValueError:
+        raise HTTPException(400, "IP 주소 형식이 아닙니다 (예: 203.0.113.5, 2001:db8::1)")
     settings_store.add_admin_ip(label, ip)
     log_action(request, "관리자 IP 추가", f"{label} {ip}")
     return {"ok": True, "admin_ips": settings_store.load()["admin_ips"]}
@@ -53,16 +58,18 @@ def delete_admin_ip(admin_id: str, request: Request) -> dict:
 
 
 @router.get("/access-logs")
-def access_logs(view: str = "all", limit: int = 2000) -> dict:
+def access_logs(request: Request, view: str = "all", limit: int = 2000) -> dict:
     """view: admin(관리 작업) · ask(질문하기) · view(페이지 조회) · all."""
     if view not in _VIEWS:
         raise HTTPException(400, "view 는 admin·ask·view·all 중 하나입니다")
+    log_action(request, "접속 기록 조회", view)  # IP 가 담긴 기록을 누가 봤는지 남긴다 (기록 전에 남겨 이번 조회도 목록에 보인다)
     rows = _logs(view, max(1, min(limit, 5000)))
     return {"view": view, "logs": rows, "count": len(rows), "unique_ips": len({r["ip"] for r in rows})}
 
 
 @router.get("/actions")
-def actions(limit: int = 2000) -> dict:
+def actions(request: Request, limit: int = 2000) -> dict:
     """관리자 행동 기록 (log_action 이 남긴 것) — access-logs?view=admin 과 같다."""
+    log_action(request, "접속 기록 조회", "actions")
     rows = _logs("admin", max(1, min(limit, 5000)))
     return {"actions": rows, "count": len(rows), "unique_ips": len({r["ip"] for r in rows})}

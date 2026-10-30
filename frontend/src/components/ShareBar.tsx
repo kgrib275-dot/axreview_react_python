@@ -1,23 +1,31 @@
 // 공유 바 — 카카오톡·LinkedIn·결과 카드 받기·링크 복사·기기 공유 (Streamlit 판 app/note_ui.share_bar 와 같은 동작).
 // url 은 /s/… 공유 주소(미리보기 이미지가 결과별로 뜸) 또는 현재 주소.
+// 채널 버튼을 누를 때마다 share 기록을 남긴다 (item = 어떤 내용, value = 사이트 안 경로, extra.channel = 채널) — 관리 > 참여 분석.
 import { useState } from "react";
+import { track } from "../api";
 import { useMe } from "../me";
 
 declare global {
   interface Window { Kakao?: { isInitialized(): boolean; init(k: string): void; Share: { sendScrap(o: { requestUrl: string }): void } } }
 }
 
-type Props = { note?: string; url?: string; title?: string; text?: string; image?: string; imageName?: string };
+type Props = { content: string; note?: string; url?: string; title?: string; text?: string; image?: string; imageName?: string };
 
-export default function ShareBar({ note = "", url, title, text, image, imageName = "axreview-result.png" }: Props) {
+export default function ShareBar({ content, note = "", url, title, text, image, imageName = "axreview-result.png" }: Props) {
   const { me } = useMe();
   const [flash, setFlash] = useState<Record<string, string>>({});
   const abs = () => new URL(url || location.href, location.origin).href;
+  // 서버는 value 가 '/' 로 시작하는 사이트 안 경로일 때만 남긴다 → 절대 주소에서 경로만 떼어 보낸다
+  const log = (channel: string) => {
+    const u = new URL(abs());
+    track("share", content, u.pathname + u.search, { channel });
+  };
   const done = (k: string, msg: string) => {
     setFlash((f) => ({ ...f, [k]: msg }));
     setTimeout(() => setFlash((f) => ({ ...f, [k]: "" })), 1600);
   };
   const copy = async (k: string, msg: string) => {
+    log(k);
     try {
       await navigator.clipboard.writeText(abs());
       done(k, msg);
@@ -28,6 +36,7 @@ export default function ShareBar({ note = "", url, title, text, image, imageName
   const kakao = async () => {
     const key = me?.kakao_key;
     if (key) {
+      log("kakao");
       const go = () => {
         try {
           if (!window.Kakao!.isInitialized()) window.Kakao!.init(key);
@@ -42,12 +51,20 @@ export default function ShareBar({ note = "", url, title, text, image, imageName
       document.head.appendChild(s);
       return;
     }
-    if (navigator.share && matchMedia("(pointer: coarse)").matches) return navigator.share({ title: title || document.title, url: abs() }).catch(() => undefined);
+    if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+      log("kakao");
+      return navigator.share({ title: title || document.title, url: abs() }).catch(() => undefined);
+    }
     copy("kakao", "복사됨 — 카톡에 붙여넣기 ✓");
   };
   const linkedin = () => {
+    log("linkedin");
     const body = (text || title || document.title) + "\n" + abs();
     window.open("https://www.linkedin.com/feed/?shareActive=true&text=" + encodeURIComponent(body), "_blank", "noopener");
+  };
+  const native = () => {
+    log("native");
+    navigator.share({ title: title || document.title, url: abs() }).catch(() => undefined);
   };
   return (
     <div className="nt-bar">
@@ -58,7 +75,7 @@ export default function ShareBar({ note = "", url, title, text, image, imageName
       {image && <a className="act" href={image} download={imageName}>🖼 결과 카드 받기</a>}
       <button className="act" type="button" onClick={() => copy("copy", "복사됨 ✓")}>{flash.copy || "🔗 링크 복사"}</button>
       {typeof navigator !== "undefined" && "share" in navigator && (
-        <button className="act" type="button" onClick={() => navigator.share({ title: title || document.title, url: abs() }).catch(() => undefined)}>공유</button>
+        <button className="act" type="button" onClick={native}>공유</button>
       )}
     </div>
   );
