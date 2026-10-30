@@ -1,6 +1,6 @@
 // 관리 영역 틀 — 왼쪽 메뉴(15개 화면) + 중첩 라우트. 관리자가 아니거나 API 가 403 을 돌려주면 토큰 입력 화면을 띄운다.
 import { lazy, Suspense, useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Alert } from "../../components/ui";
 import { useMe } from "../../me";
 import "./admin.css";
@@ -28,6 +28,46 @@ const PAGES: { path: string; label: string; grp?: string; C: React.LazyExoticCom
 ];
 
 const TOKEN_KEY = "axreview-admin-token";
+const NAV_KEY = "axreview-adm-nav";  // 접어 둔 그룹·전체 접힘 상태 (이 브라우저에만)
+
+/** 왼쪽 메뉴 — 16개 화면이 그룹별로 접힌다. 메뉴가 길어 좁은 화면에서는 본문이 아래로 밀렸다 (2026-10-30). */
+function SideNav() {
+  const { pathname } = useLocation();
+  const current = PAGES.find((p) => pathname.startsWith(`/admin/${p.path}`)) || PAGES[0];
+  const [st, setSt] = useState<{ collapsed: boolean; closed: string[] }>(() => {
+    try { return { collapsed: false, closed: [], ...JSON.parse(localStorage.getItem(NAV_KEY) || "{}") }; } catch { return { collapsed: false, closed: [] }; }
+  });
+  useEffect(() => { try { localStorage.setItem(NAV_KEY, JSON.stringify(st)); } catch { /* 사생활 보호 모드 */ } }, [st]);
+  // 그룹 나누기: grp 가 있는 항목이 새 그룹을 연다
+  const groups: { name: string; items: typeof PAGES }[] = [];
+  for (const p of PAGES) {
+    if (p.grp) groups.push({ name: p.grp, items: [] });
+    groups[groups.length - 1].items.push(p);
+  }
+  const toggleGroup = (name: string) => setSt((s) => ({ ...s, closed: s.closed.includes(name) ? s.closed.filter((n) => n !== name) : [...s.closed, name] }));
+  return (
+    <nav className={`adm-side${st.collapsed ? " collapsed" : ""}`} aria-label="관리 메뉴">
+      <button type="button" className="nav-tg" onClick={() => setSt((s) => ({ ...s, collapsed: !s.collapsed }))}
+        aria-expanded={!st.collapsed} title={st.collapsed ? "메뉴 펼치기" : "메뉴 접기"}>
+        <span>☰</span><b>{st.collapsed ? current.label : "메뉴"}</b><i>{st.collapsed ? "펼치기" : "접기"}</i>
+      </button>
+      {!st.collapsed && groups.map((g) => {
+        // 현재 화면이 속한 그룹은 항상 펼친다 — 접힌 머리글 아래 현재 항목만 홀로 남으면 어디 속한지 안 보였다
+        const open = !st.closed.includes(g.name) || g.items.includes(current);
+        return (
+          <div key={g.name} className={`nav-grp${open ? "" : " closed"}`}>
+            <button type="button" className="grp" onClick={() => toggleGroup(g.name)} aria-expanded={open}>
+              <i>{open ? "▾" : "▸"}</i>{g.name}{!open && <small>{g.items.length}</small>}
+            </button>
+            {g.items.map((p) => open && (
+              <NavLink key={p.path} to={`/admin/${p.path}`} className={({ isActive }) => (isActive ? "on" : "")}>{p.label}</NavLink>
+            ))}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
 
 function TokenPrompt({ reason, onDone }: { reason: string; onDone: () => Promise<void> }) {
   const [tok, setTok] = useState("");
@@ -88,14 +128,7 @@ export default function AdminApp() {
     <ToastProvider>
       <JobsProvider>
         <div className="container adm">
-          <nav className="adm-side" aria-label="관리 메뉴">
-            {PAGES.map((p) => (
-              <span key={p.path} style={{ display: "contents" }}>
-                {p.grp && <div className="grp">{p.grp}</div>}
-                <NavLink to={`/admin/${p.path}`} className={({ isActive }) => (isActive ? "on" : "")}>{p.label}</NavLink>
-              </span>
-            ))}
-          </nav>
+          <SideNav />
           <main className="adm-main">
             <Suspense fallback={<div className="page-loading">불러오는 중…</div>}>
               <Routes>

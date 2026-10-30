@@ -3,12 +3,26 @@
 .adm-side{position:sticky;top:72px;display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);border-radius:14px;padding:8px;background:var(--surface)}
 .adm-side a{text-decoration:none;color:var(--ink-2);padding:7px 10px;border-radius:8px;font-size:.95rem;white-space:nowrap}
 .adm-side a.on,.adm-side a:hover{color:var(--ink);background:rgba(46,155,234,.14)}
-.adm-side .grp{font-family:var(--f-body);font-size:.8rem;color:var(--muted);padding:8px 10px 2px}
+/* 메뉴 접기 — 그룹 머리글은 버튼, 전체 접기 버튼은 맨 위 (2026-10-30: 메뉴 16개가 길어 좁은 화면에서 본문이 밀렸다) */
+.adm-side .grp{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:.92rem;font-weight:700;color:var(--ink);padding:9px 10px 6px;border-radius:8px}
+.adm-side .grp:hover{background:rgba(46,155,234,.08)}.adm-side .grp i{font-style:normal;width:1em;font-size:.8rem;color:var(--accent-2)}
+.adm-side .grp small{margin-left:auto;font-size:.76rem;font-weight:600;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:1px 8px}
+.adm-side .nav-grp + .nav-grp{border-top:1px solid var(--line);margin-top:4px;padding-top:2px}
+.adm-side .nav-grp a{margin-left:14px;font-size:.95rem}
+.adm-side .nav-grp{display:flex;flex-direction:column;gap:2px}
+.adm-side .nav-tg{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;color:var(--ink);font-size:.95rem;border:1px solid var(--line);margin-bottom:4px}
+.adm-side .nav-tg:hover{border-color:var(--accent)}.adm-side .nav-tg i{font-style:normal;margin-left:auto;font-size:.78rem;color:var(--accent-2)}
+.adm-side.collapsed{padding:6px}.adm-side.collapsed .nav-tg{margin:0}
+.adm.has-collapsed{grid-template-columns:auto 1fr}
 .adm-main{min-width:0}
 .adm-head{margin-bottom:14px}
 .adm-head .sec-h{font-size:1.5rem;margin:.2rem 0 .3rem}
 .adm-head .caption{display:block}
-@media (max-width:860px){.adm{grid-template-columns:1fr}.adm-side{position:static;flex-direction:row;flex-wrap:wrap}}
+@media (max-width:860px){.adm{grid-template-columns:1fr}.adm-side{position:static}
+  .adm-side .nav-grp{flex-direction:row;flex-wrap:wrap;gap:4px}.adm-side .nav-grp .grp{width:100%}.adm-side a{padding:6px 10px;font-size:.9rem}}
+/* 웹훅 줄: 주소 전체를 한 줄에 (넘치면 말줄임, 마우스를 올리면 전체) */
+.hook-url{min-width:0}.hook-url code{display:block;font-size:.8rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.list-row.hook-edit{align-items:flex-end;flex-wrap:wrap}.list-row.hook-edit .field{margin-bottom:0}.list-row.hook-edit .field:not(.narrow){flex:1 1 320px}
 
 /* 토큰 입력 */
 .adm-token{max-width:460px;margin:40px auto}

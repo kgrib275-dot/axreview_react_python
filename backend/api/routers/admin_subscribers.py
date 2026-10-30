@@ -218,7 +218,8 @@ def set_member_active(member_id: int, request: Request, body: dict[str, Any]) ->
 # ───────────────────────── Teams 웹훅 ─────────────────────────
 
 def _hook_row(w: dict) -> dict:
-    return {"id": w["id"], "name": w["name"], "url_short": w["url"][:60] + "…", "enabled": w.get("enabled", True)}
+    # url 전체를 준다 — 관리자만 보는 화면이고 주소를 확인·복사·수정해야 한다 (예전엔 앞 60자만 줘 화면에 "…"만 보였다)
+    return {"id": w["id"], "name": w["name"], "url": w["url"], "url_short": w["url"][:60] + "…", "enabled": w.get("enabled", True)}
 
 
 @router.get("/webhooks")
@@ -279,6 +280,9 @@ def delete_webhook(hook_id: str, request: Request) -> dict:
 def test_webhook(hook_id: str) -> dict:
     w = _find_hook(hook_id)
     ok, msg = notify.post(w["url"], notify.build_test_card(), retries=0)
+    if ok:
+        # Power Automate 는 202(접수)만 돌려주고 채널 게시는 흐름이 따로 한다 — 채널에 안 보이면 흐름 실행 기록을 봐야 한다
+        msg = f"Teams 가 받았습니다 ({msg}). 1분 안에 채널에 안 보이면 Power Automate > 내 흐름 > 실행 기록에서 실패 원인을 확인하세요."
     return {"ok": ok, "name": w["name"], "message": msg}
 
 

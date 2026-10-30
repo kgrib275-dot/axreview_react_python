@@ -145,6 +145,43 @@ function MembersTab() {
   );
 }
 
+/** 웹훅 한 줄 — 주소 전체를 보여 주고 복사·수정(이름·URL)·사용·테스트·삭제. 예전엔 앞 60자만 보여 "…"로 끝나 주소를 확인할 수 없었다. */
+function HookRow({ w, reload }: { w: Row; reload: () => void }) {
+  const act = useAct();
+  const on = w.enabled === undefined ? true : bool(w.enabled);
+  const [edit, setEdit] = useState(false);
+  const [f, setF] = useState({ name: str(w.name), url: str(w.url) });
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(str(w.url)); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }
+    catch { window.prompt("복사할 주소", str(w.url)); }
+  };
+  if (edit) {
+    return (
+      <div className="list-row hook-edit">
+        <Field label="채널 이름" className="narrow"><input type="text" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+        <Field label="웹훅 URL"><input type="text" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} /></Field>
+        <button className="btn sm primary" onClick={async () => {
+          if (!(f.name.trim() && /^https:\/\/\S+$/.test(f.url.trim()))) return act(async () => { throw new Error("이름과 https:// 로 시작하는 URL을 입력하세요."); });
+          const r = await act(() => A.put(`webhooks/${w.id}`, { name: f.name.trim(), url: f.url.trim() }), "저장했습니다.");
+          if (r) { setEdit(false); reload(); }
+        }}>저장</button>
+        <button className="btn sm ghost" onClick={() => { setF({ name: str(w.name), url: str(w.url) }); setEdit(false); }}>취소</button>
+      </div>
+    );
+  }
+  return (
+    <div className="list-row">
+      <div className="grow hook-url"><b>{str(w.name)}</b><code title={str(w.url)}>{str(w.url)}</code></div>
+      <button className="btn sm" onClick={copy}>{copied ? "✓ 복사됨" : "📋 복사"}</button>
+      <button className="btn sm" onClick={() => setEdit(true)}>✎ 수정</button>
+      <label className="chk"><input type="checkbox" checked={on} onChange={async (e) => { await act(() => A.put(`webhooks/${w.id}`, { enabled: e.target.checked }), "저장했습니다."); reload(); }} />사용</label>
+      <button className="btn sm" onClick={async () => { const r = await act(() => A.post<Row>(`webhooks/${w.id}/test`)); if (r) act(async () => { if (r.ok === false) throw new Error(`${str(w.name)}: ${str(pick(r, "msg", "message"))}`); }, `${str(w.name)}: ${str(pick(r, "msg", "message")) || "보냈습니다"}`); }}>📨 테스트</button>
+      <button className="btn sm" onClick={async () => { if (!window.confirm(`'${str(w.name)}' 웹훅을 삭제할까요?`)) return; await act(() => A.del(`webhooks/${w.id}`), "삭제했습니다."); reload(); }}>🗑 삭제</button>
+    </div>
+  );
+}
+
 function TeamsTab() {
   const { finished } = useJobs();
   const hooks = useLoad(() => A.get<unknown>("webhooks"), []);
@@ -159,17 +196,7 @@ function TeamsTab() {
     <div>
       <p className="caption">Teams 채널 &gt; 워크플로 &gt; '웹후크 요청을 받으면 채널에 게시' 템플릿으로 만든 URL을 등록하세요.</p>
       {hooks.error && <Alert kind="err">{hooks.error}</Alert>}
-      {list.map((w) => {
-        const on = w.enabled === undefined ? true : bool(w.enabled);
-        return (
-          <div key={str(w.id)} className="list-row">
-            <div className="grow"><b>{str(w.name)}</b><br /><code>{str(w.url).slice(0, 60)}…</code></div>
-            <label className="chk"><input type="checkbox" checked={on} onChange={async (e) => { await act(() => A.put(`webhooks/${w.id}`, { enabled: e.target.checked }), "저장했습니다."); hooks.reload(); }} />사용</label>
-            <button className="btn sm" onClick={async () => { const r = await act(() => A.post<Row>(`webhooks/${w.id}/test`)); if (r) act(async () => { if (r.ok === false) throw new Error(`${str(w.name)}: ${str(pick(r, "msg", "message"))}`); }, `${str(w.name)}: ${str(pick(r, "msg", "message")) || "보냈습니다"}`); }}>📨 테스트</button>
-            <button className="btn sm" onClick={async () => { if (!window.confirm(`'${str(w.name)}' 웹훅을 삭제할까요?`)) return; await act(() => A.del(`webhooks/${w.id}`), "삭제했습니다."); hooks.reload(); }}>🗑 삭제</button>
-          </div>
-        );
-      })}
+      {list.map((w) => <HookRow key={str(w.id)} w={w} reload={hooks.reload} />)}
       <div className="inline" style={{ margin: "10px 0" }}>
         <Field label="채널 이름" className="narrow"><input type="text" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="웹훅 URL"><input type="text" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} /></Field>
