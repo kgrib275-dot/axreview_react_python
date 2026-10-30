@@ -22,7 +22,7 @@ from fastapi import APIRouter, Body, HTTPException
 
 from api.deps import Caller, CallerDep, throttle
 from api.routers import me as me_state
-from api.routers.subscribe import _email, _mask, _may_mail
+from api.routers.subscribe import _email, _mask, _may_mail, send_later
 from pipeline import agent_chat, alerts, db, engage, mailer, membership, settings_store
 
 router = APIRouter(tags=["ask"])
@@ -205,12 +205,13 @@ def ask_link(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     if db.access_count_since(c.ip, "ask_link_try", 24 * 60) >= 20:
         raise HTTPException(status_code=429, detail="잠시 후 다시 시도해 주세요.")
     throttle("ask_link_try", c, per_visitor=3, per_ip=20, minutes=60)
-    token = db.issue_link_token(email)  # 활성·확인된 구독자가 아니면 None
-    if token and mailer.is_configured() and _may_mail(email, "ask_link_mail", "질문하기 연결 메일"):
-        try:
-            mailer.send([(email, "")], "[AX Review] 질문하기 연결", lambda _t: mailer.ask_link_html(token))
-        except Exception:  # noqa: BLE001 - SMTP 오류를 응답으로 드러내면 구독 여부가 새므로 삼킨다 (서버 로그에만)
-            log.exception("질문하기 연결 메일 실패")
+    # 순서가 중요하다 (2026-10-30 보안 점검): 메일 제한을 먼저 통과해야 토큰을 새로 만든다 — 예전엔 메일을 안 보내는 시도도
+    # 토큰을 갈아 끼워, 남이 같은 주소로 반복 요청하면 피해자가 받은 연결 링크가 '만료'가 됐다.
+    if mailer.is_configured() and db.subscriber_ask(email) and _may_mail(email, "ask_link_mail", "질문하기 연결 메일"):
+        token = db.issue_link_token(email)  # 활성·확인된 구독자가 아니면 None
+        if token:
+            # 백그라운드 — 동기로 보내면 응답 시간 차이로 구독 여부가 샌다. 오류도 응답에 드러내지 않는다 (서버 로그에만)
+            send_later(mailer.send, [(email, "")], "[AX Review] 질문하기 연결", lambda _t, tk=token: mailer.ask_link_html(tk))
     engage.record("ask_link_mail", visitor=c.visitor)
     return {"ok": True, "message": "구독 중인 주소라면 연결 메일을 보냈습니다. 메일의 '질문하기 연결하기'를 눌러 주세요 (1시간 안에)."}
 

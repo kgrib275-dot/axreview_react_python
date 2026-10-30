@@ -8,7 +8,9 @@ Streamlit 판 app/dialogs.py(subscribe·contact), app_pages/confirm.py·unsubscr
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
+import threading
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
@@ -34,14 +36,31 @@ CONFIRM_MAIL_GAP_MIN = 10   # 같은 주소로 확인 메일은 10분에 한 번
 CONFIRM_MAIL_PER_DAY = 3    # 하루 3번까지 — 남의 주소로 신청을 반복해 메일 폭탄을 보내지 못하게
 
 
+MAIL_ACTIONS = ("confirm_mail", "ask_link_mail")  # 방문자가 남의 주소로 일으킬 수 있는 메일 — 하루 상한은 이 합계로 센다
+log = logging.getLogger("axreview.subscribe")
+
+
 def _may_mail(email: str, action: str = "confirm_mail", page: str = "구독 확인 메일") -> bool:
-    """같은 주소로 보내는 메일 제한 (확인 메일, 질문하기 연결 메일 — api/routers/ask.py 도 action 을 달리해 쓴다)."""
+    """같은 주소로 보내는 메일 제한 (확인 메일, 질문하기 연결 메일 — api/routers/ask.py 도 action 을 달리해 쓴다).
+    간격(10분)은 종류별, 하루 상한(3통)은 종류 합계 — 예전엔 종류별로 따로 세어 한 주소에 하루 6통까지 갔다 (2026-10-30)."""
     key = hashlib.sha256(email.lower().encode()).hexdigest()[:24]  # 주소 자체는 접속 기록에 남기지 않는다
-    if (db.access_count_detail_since(action, key, CONFIRM_MAIL_GAP_MIN)
-            or db.access_count_detail_since(action, key, 24 * 60) >= CONFIRM_MAIL_PER_DAY):
+    if db.access_count_detail_since(action, key, CONFIRM_MAIL_GAP_MIN):
+        return False
+    if sum(db.access_count_detail_since(a, key, 24 * 60) for a in MAIL_ACTIONS) >= CONFIRM_MAIL_PER_DAY:
         return False
     db.record_access(None, page, action, key)
     return True
+
+
+def send_later(fn, *args) -> None:
+    """메일을 백그라운드로 보낸다 — 요청 안에서 SMTP(수백 ms~수 초)를 기다리면 응답 시간 차이로 '이미 구독 중인 주소'인지
+    알아낼 수 있었다 (2026-10-30 보안 점검). 실패는 서버 로그에만."""
+    def run():
+        try:
+            fn(*args)
+        except Exception:  # noqa: BLE001
+            log.exception("메일 발송 실패 (백그라운드)")
+    threading.Thread(target=run, daemon=True).start()
 
 
 @router.post("/subscribe")
@@ -65,7 +84,7 @@ def subscribe(payload: dict = Body(...), c: Caller = CallerDep) -> dict:
     if token:
         engage.record("subscribe", source, value=ref, visitor=c.visitor)
         if mailer.is_configured() and _may_mail(email):
-            mailer.send_confirmation(email, token)  # 실패하면 관리 > 구독·발송에서 다시 보낼 수 있다
+            send_later(mailer.send_confirmation, email, token)  # 실패하면 관리 > 구독·발송에서 다시 보낼 수 있다
     # 이미 구독 중이어도 같은 응답 — 존재 여부 비노출
     me_state.save_state(c.visitor, {"sub_pending": True, "pref_inds": inds})  # 확인 대기 — 완료(subscribed)는 confirm 에서 (개인화: 노트 업종 필터 기본값)
     reward = f"구독 후 메일 하단의 내 추천 링크로 친구 {referral.REWARD_AT}명이 구독하면 지난 호 주간 PDF 전체를 열어 드립니다."

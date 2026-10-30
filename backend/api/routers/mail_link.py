@@ -32,7 +32,9 @@ def mail_click(device: str, request: Request, t: str = Query(""), to: str = Quer
         if sub and sub["active"]:
             # value = 발송일 (메일이 가진 s) — 관리 화면이 newsletters.sent_at 날짜별로 묶어 장치별 클릭률을 낸다
             engage.record("mail_click", device, s if _DAY_RE.match(s) else engage.today().isoformat(), visitor=c.visitor)
-            db.link_subscriber_visitor(c.visitor, token=t)  # 쿠키 방문자만, 이미 이어져 있으면 그대로
+            # 여기서 구독자↔브라우저를 잇지 않는다 (2026-10-30 보안 점검): 메일 링크(GET)는 전달·미리 열기(메일 보안 검사기)로
+            # 남이 열 수 있어, 열기만으로 이으면 남의 질문 횟수를 쓰거나 검사기 쿠키가 먼저 묶였다.
+            # 연결은 사람이 버튼을 누르는 두 곳(구독 확인 POST, 질문하기 연결 POST)에서만 한다.
     resp = RedirectResponse(target, status_code=302)
     plant_cookie(resp, request, c)  # 새 브라우저면 여기서 쿠키가 심겨야 사이트에서 같은 방문자로 이어진다
     return resp

@@ -289,7 +289,7 @@ export default function Engagement() {
       ) : <p className="caption">데이터 없음</p>)}
       {tab === "예측 투표" && <DataTable rows={polls} />}
       {tab === "메일" && (mail.error ? <Alert kind="err">{mail.error}</Alert> : mail.data ? <MailTab d={mail.data} /> : <p className="caption">불러오는 중…</p>)}
-      {tab === "참여 지도" && (map.error ? <Alert kind="err">{map.error}</Alert> : map.data ? <iframe className="adm-frame" title="참여 지도" srcDoc={map.data} style={{ height: 620 }} /> : <p className="caption">지도를 불러오는 중…</p>)}
+      {tab === "참여 지도" && (map.error ? <Alert kind="err">{map.error}</Alert> : map.data ? <iframe className="adm-frame" title="참여 지도" srcDoc={map.data} sandbox="allow-scripts" style={{ height: 620 }} /> : <p className="caption">지도를 불러오는 중…</p>)}
 
       {Object.keys(unknown).length > 0 && (
         <Expander title="그 밖의 집계">

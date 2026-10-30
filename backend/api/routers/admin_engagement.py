@@ -322,7 +322,7 @@ def _pattern_tab(days: int) -> dict:
     conn = engage._conn()
     try:
         rows = conn.execute(f"SELECT kind, item, visitor, created_at FROM engagements WHERE created_at >= ? AND visitor NOT LIKE ? "
-                            f"AND kind IN ({','.join('?' * len(kinds))}) ORDER BY visitor, created_at",
+                            f"AND kind IN ({','.join('?' * len(kinds))}) ORDER BY visitor, created_at LIMIT 300000",  # 쿠키를 지워 가며 기록을 부풀려도 관리 화면이 멈추지 않게
                             (since, engage.SAMPLE + "%", *kinds)).fetchall()
         # 기간 안 방문자가 처음 보인 날 (기간 전 기록 포함) — 신규/재방문 구분
         first_seen = dict(conn.execute("SELECT visitor, MIN(substr(created_at, 1, 10)) FROM engagements WHERE kind = 'page_view' "
