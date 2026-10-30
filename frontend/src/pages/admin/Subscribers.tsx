@@ -1,7 +1,7 @@
 // 구독·발송 — 구독자 / 뉴스레터 / 월 구독 / Teams / 문의 (app_pages/admin/subscribers.py).
 import { useEffect, useState } from "react";
 import { Alert, Tabs, useLoad } from "../../components/ui";
-import { A, AdminHead, CsvButton, DataTable, Expander, Field, Generic, Row, asArray, bool, isObj, num, pick, str, today, useAct, useRemembered } from "./common";
+import { A, AdminHead, CsvButton, DataTable, Expander, Field, Generic, Row, asArray, bool, isObj, num, pick, str, today, useAct, usePaged, useRemembered } from "./common";
 import { JobStatus, RunLogTable, StartJob, useJobs } from "./JobRunner";
 
 const SECTIONS = ["구독자", "뉴스레터", "월 구독", "Teams", "문의"];
@@ -14,7 +14,7 @@ function SubscribersTab() {
   const pending = isObj(data) ? asArray(pick(data, "pending", "pending_confirmations")) : [];
   const counts = isObj(data) && isObj(data.counts) ? (data.counts as Row) : isObj(data) && isObj(data.referral) ? (data.referral as Row) : {};
   const smtp = isObj(data) ? pick(data, "smtp_ok", "smtp_configured") : undefined;
-  const [q, setQ] = useState("");
+  const [q, setQ] = useRemembered<string>("subs-q", "");
   const [email, setEmail] = useState("");
   const [active, setActive] = useState<Record<string, boolean>>({});
   useEffect(() => setActive(Object.fromEntries(subs.map((s) => [str(s.email), bool(s.active)]))), [data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -40,6 +40,7 @@ function SubscribersTab() {
     질문: `${num(s.ask_used)}/${num(s.ask_credits)}${str(s.ask_requested_at) ? " 충전 요청" : ""}`, 충전: str(s.email),
   }));
   const csvRows = subs.map((s) => { const { token, ...rest } = s; void token; return rest; });
+  const pg = usePaged("subs", view, q.trim().toLowerCase(), 20);  // 쪽·보기 개수 F5 유지
   const activeCount = Object.values(active).filter(Boolean).length;
   return (
     <div>
@@ -68,12 +69,14 @@ function SubscribersTab() {
         전체 {subs.length} · 활성 {activeCount} · 추천으로 구독 {num(counts.referred)} · 보상({str(counts.reward_at) || "?"}명) 달성 {num(counts.rewarded)}
       </p>
       <Field label="이메일 찾기"><input type="text" placeholder="일부만 입력해도 됩니다" value={q} onChange={(e) => setQ(e.target.value)} /></Field>
-      <DataTable rows={view} cols={["이메일", "구독일", "활성", "업종", "추천 수", "확인", "질문", "충전"]} tall
+      <div className="board-bar"><span className="caption">{pg.info}</span><span className="sp" />{pg.sizeSel}</div>
+      <DataTable rows={pg.shown} cols={["이메일", "구독일", "활성", "업종", "추천 수", "확인", "질문", "충전"]}
         render={{
           활성: (v) => <input type="checkbox" checked={!!active[str(v)]} onChange={(e) => setActive({ ...active, [str(v)]: e.target.checked })} />,
           질문: (v) => { const t = str(v); const req = t.endsWith(" 충전 요청"); return <>{req ? t.slice(0, -6) : t}{req && <span className="badge" style={{ marginLeft: 6 }}>충전 요청</span>}</>; },
           충전: (v) => chargeCtl(str(v)),
         }} />
+      {pg.pager}
       <div className="btn-row" style={{ margin: "10px 0" }}>
         <button className="btn primary" onClick={async () => {
           const changed = subs.filter((s) => active[str(s.email)] !== undefined && active[str(s.email)] !== bool(s.active));

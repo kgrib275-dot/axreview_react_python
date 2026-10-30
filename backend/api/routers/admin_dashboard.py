@@ -31,5 +31,5 @@ def dashboard() -> dict:
         "drafting": {"min_score": cfg["drafting"]["min_score"], "per_run": cfg["drafting"]["per_run"]},
         "gemini": {"models": models, "rows": gemini_keys.status_rows(models)},
         "jobs": admin_jobs.status(),
-        "run_logs": admin_jobs.run_log_rows(None, 50),
+        "run_logs": admin_jobs.run_log_rows(None, 300),  # 화면이 필터·쪽 넘김을 하므로 최근 300건을 준다
     }

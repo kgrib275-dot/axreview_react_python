@@ -112,3 +112,45 @@ pre.code{background:var(--code-bg);border:1px solid var(--line);border-radius:10
 .heat{border-collapse:collapse;font-size:.78rem}
 .heat th,.heat td{border:1px solid var(--line);padding:3px 0;min-width:26px;text-align:center}
 .heat tbody th{padding:3px 8px}
+
+/* 실행 기록 게시판 (JobRunner.RunLogTable) — 필터 줄·쪽 넘김, 시각·작업·트리거·결과 칸은 줄바꿈하지 않는다 */
+.runlog .rl-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 6px}
+.runlog .rl-filters select,.runlog .rl-filters input{width:auto;padding:7px 10px;font-size:.9rem}
+.runlog .rl-filters .rl-q{min-width:180px;flex:1 1 180px;max-width:320px}
+.runlog .rl-sp{flex:1}
+.runlog .rl-count{margin:0 0 6px}
+.runlog .table td:nth-child(-n+4),.runlog .table th:nth-child(-n+4){white-space:nowrap}
+.runlog .rl-pager{display:flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;margin:10px 0}
+@media (max-width:640px){.runlog .rl-filters select,.runlog .rl-filters input{flex:1 1 140px}.runlog .rl-sp{display:none}}
+
+/* 공용 게시판 (common.usePaged · 노트 검토 등) */
+.board-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0}
+.board-bar select,.board-bar input{width:auto;padding:7px 10px;font-size:.9rem}
+.board-bar .bq{min-width:180px;flex:1 1 200px;max-width:340px}
+.board-bar .sp{flex:1}
+.pg-nav{display:flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;margin:10px 0}
+.board-row{cursor:pointer}.board-row:hover td{background:rgba(46,155,234,.06)}.board-row.on td{background:rgba(46,155,234,.14)}
+.board-edit{border:1px solid var(--accent);border-radius:14px;padding:14px 16px;margin:10px 0;background:var(--surface)}
+.board-edit-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+@media (max-width:640px){.board-bar select,.board-bar input{flex:1 1 140px}.board-bar .sp{display:none}}
+.board-edit-h .grow{flex:1;min-width:200px}
+
+/* 전역 실행 로그 독 — 작업이 돌면 어느 관리 화면이든 아래에 고정 (2026-10-30). 펼침 높이는 화면의 40% 까지, 로그는 독 안에서만 스크롤 */
+.log-dock{position:fixed;left:0;right:0;bottom:0;z-index:150;margin:0 auto;max-width:calc(var(--max) - 40px);background:var(--surface);border:1px solid var(--line);border-bottom:none;border-radius:14px 14px 0 0;box-shadow:0 -10px 30px var(--shadow);padding:8px 12px 4px;max-height:40vh;display:flex;flex-direction:column}
+.log-dock.live{border-top:2px solid var(--accent)}
+.log-dock .ld-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.log-dock .ld-title{cursor:pointer;font-size:.95rem;white-space:nowrap}
+.log-dock .ld-sp{flex:1}
+.log-dock .ld-peek{flex:1 1 120px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.85rem;color:var(--muted)}
+.log-dock.collapsed .ld-peek + .ld-sp{display:none}
+.log-dock .ld-tabs{display:flex;gap:4px;flex-wrap:wrap}
+.log-dock .ld-tabs button{all:unset;cursor:pointer;font-size:.85rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2)}
+.log-dock .ld-tabs button.on{border-color:var(--accent);color:var(--ink);font-weight:600}
+.log-dock .joblog{flex:1 1 auto;min-height:0;max-height:none;margin:6px 0 4px}
+.log-dock.collapsed{padding-bottom:8px}
+@media (max-width:860px){.log-dock{max-width:none;border-radius:12px 12px 0 0;padding:6px 10px 4px}.log-dock .ld-title{white-space:normal}}
+
+/* 수집 테스트 — 그룹별 소스 고르기 */
+.pick-grp{margin:6px 0}
+.pick-grp .btn-row{margin-bottom:4px}
+.pick-grp .multi{max-height:none}

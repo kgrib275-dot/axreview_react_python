@@ -2,7 +2,7 @@
 // Streamlit 판 app/admin_ui.py 의 start_job · job_status · log_view · run_log_table 을 옮겼다.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, useLoad } from "../../components/ui";
-import { A, DataTable, Expander, Generic, Row, asArray, isObj, num, pick, str, useToast } from "./common";
+import { A, DataTable, Expander, Generic, Row, asArray, isObj, num, pick, str, usePaged, useRemembered, useToast } from "./common";
 
 export const KIND_LABELS: Record<string, string> = {
   collect: "수집", draft: "노트 초안", weekly: "주간 흐름", newsletter: "뉴스레터",
@@ -213,16 +213,22 @@ function parseResult(r: unknown): Row {
   return {};
 }
 
-/** 배치 실행 기록 표 — rows 를 주면 그대로, 없으면 GET jobs/logs 로 가져온다. */
-export function RunLogTable({ kind, limit = 50, rows: given }: { kind?: string; limit?: number; rows?: Row[] }) {
+/** 배치 실행 기록 표 — 게시판처럼 작업·결과·트리거·기간 필터, 검색, 보기 개수, 쪽 넘김 (2026-10-30: 기록이 길어 대시보드가 끝없이 내려갔다).
+ *  rows 를 주면 그대로, 없으면 GET jobs/logs 로 가져온다. 필터·보기 개수는 이 브라우저에 기억한다. */
+export function RunLogTable({ kind, limit = 300, rows: given }: { kind?: string; limit?: number; rows?: Row[] }) {
   const { finished } = useJobs();
   const { data, error } = useLoad(async () => (given ? given : asArray(await A.get(`jobs/logs?limit=${limit}${kind ? `&kind=${kind}` : ""}`), "logs", "run_logs", "rows")), [kind, limit, given, finished]);
-  const logs = (data || []).filter((r) => !kind || r.kind === kind).slice(0, limit);
-  if (error) return <Alert kind="err">{error}</Alert>;
-  if (!logs.length) return <p className="caption">실행 기록이 없습니다.</p>;
-  const view = logs.map((r) => {
+  const k = kind || "all";
+  const [fKind, setFKind] = useRemembered<string>(`rl-kind-${k}`, "");
+  const [fOk, setFOk] = useRemembered<string>(`rl-ok-${k}`, "");
+  const [fTrig, setFTrig] = useRemembered<string>(`rl-trig-${k}`, "");
+  const [fFrom, setFFrom] = useRemembered<string>(`rl-from-${k}`, "");
+  const [fTo, setFTo] = useRemembered<string>(`rl-to-${k}`, "");
+  const [q, setQ] = useRemembered<string>(`rl-q-${k}`, "");
+  const all = useMemo(() => (data || []).filter((r) => !kind || r.kind === kind).map((r) => {
     const result = parseResult(r.result);
     return {
+      raw: r, result,
       시작: str(r.started_at).replace("T", " ").slice(0, 19),
       작업: label(str(r.kind)),
       트리거: str(r.trigger),
@@ -230,14 +236,51 @@ export function RunLogTable({ kind, limit = 50, rows: given }: { kind?: string; 
       // 숫자 요약 + 메시지 둘 다 — 메시지만 보이면 "소스 1곳 실패"가 전체 실패처럼 읽힌다
       요약: [summary(str(r.kind), result), str(r.message)].filter(Boolean).join(" · "),
     };
-  });
-  const first = parseResult(logs[0].result);
+  }), [data, kind]);
+  const kinds = useMemo(() => [...new Set(all.map((r) => str(r.raw.kind)))], [all]);
+  const trigs = useMemo(() => [...new Set(all.map((r) => r.트리거).filter(Boolean))], [all]);
+  const needle = q.trim().toLowerCase();
+  const rows = all.filter((r) => (!fKind || r.raw.kind === fKind) && (!fOk || r.결과 === fOk) && (!fTrig || r.트리거 === fTrig)
+    && (!fFrom || r.시작.slice(0, 10) >= fFrom) && (!fTo || r.시작.slice(0, 10) <= fTo)
+    && (!needle || `${r.작업} ${r.트리거} ${r.요약}`.toLowerCase().includes(needle)));
+  const pg = usePaged(`rl-${k}`, rows, `${fKind}|${fOk}|${fTrig}|${fFrom}|${fTo}|${needle}`, 10);
+  if (error) return <Alert kind="err">{error}</Alert>;
+  if (!all.length) return <p className="caption">실행 기록이 없습니다.</p>;
+  const anyFilter = fKind || fOk || fTrig || fFrom || fTo || q;
+  const reset = () => { setFKind(""); setFOk(""); setFTrig(""); setFFrom(""); setFTo(""); setQ(""); };
+  const first = pg.shown[0] || rows[0] || all[0];
   return (
-    <div>
-      <DataTable rows={view} />
-      <Expander title="최근 실행 상세 (JSON)">
-        <Generic value={Object.keys(first).length ? first : { message: str(logs[0].message) }} />
-      </Expander>
+    <div className="runlog">
+      <div className="rl-filters">
+        {!kind && (
+          <select value={fKind} onChange={(e) => setFKind(e.target.value)} aria-label="작업">
+            <option value="">작업 전체</option>
+            {kinds.map((x) => <option key={x} value={x}>{label(x)}</option>)}
+          </select>
+        )}
+        <select value={fOk} onChange={(e) => setFOk(e.target.value)} aria-label="결과">
+          <option value="">결과 전체</option><option value="성공">성공</option><option value="주의">주의</option>
+        </select>
+        <select value={fTrig} onChange={(e) => setFTrig(e.target.value)} aria-label="트리거">
+          <option value="">트리거 전체</option>
+          {trigs.map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+        <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} aria-label="시작일" />
+        <span className="caption">~</span>
+        <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} aria-label="종료일" />
+        <input type="text" className="rl-q" placeholder="요약·작업 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="검색" />
+        {anyFilter && <button type="button" className="btn sm ghost" onClick={reset}>초기화</button>}
+        <span className="rl-sp" />
+        {pg.sizeSel}
+      </div>
+      <p className="caption rl-count">전체 {all.length}건 중 {pg.info}</p>
+      <DataTable rows={pg.shown.map(({ raw, result, ...v }) => v)} empty="조건에 맞는 기록이 없습니다." />
+      {pg.pager}
+      {first && (
+        <Expander title={`실행 상세 (JSON) · ${first.시작} ${first.작업}`}>
+          <Generic value={Object.keys(first.result).length ? first.result : { message: str(first.raw.message) }} />
+        </Expander>
+      )}
     </div>
   );
 }

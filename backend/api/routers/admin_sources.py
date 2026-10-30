@@ -102,7 +102,8 @@ def put_keywords(request: Request, body: dict[str, Any]) -> dict:
         except (TypeError, ValueError):
             raise HTTPException(400, f"가중치는 숫자여야 합니다: {kw}")
         rows.append({"keyword": kw, "aliases": [str(a) for a in aliases], "mode": mode,
-                     "weight": min(5.0, max(0.1, weight)), "active": bool(r.get("active", True)), "category": category})
+                     "weight": min(5.0, max(0.1, weight)), "active": bool(r.get("active", True)), "category": category,
+                     "needs_ai": bool(r.get("needs_ai"))})
     db.replace_keywords(rows)
     log_action(request, "키워드 저장", f"{len(rows)}개")
     return {"ok": True, "count": len(rows)}

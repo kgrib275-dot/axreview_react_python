@@ -1,7 +1,7 @@
 // 관리자·접속 — 관리자 IP 추가/삭제, 접속 기록(관리 작업·질문하기·페이지 조회·전체), 관리자 행동 기록 (app_pages/admin/access.py).
 import { useEffect, useState } from "react";
 import { Alert, Metric, Tabs, useLoad } from "../../components/ui";
-import { A, AdminHead, DataTable, Field, Row, asArray, isObj, pick, str, useAct, useRemembered } from "./common";
+import { A, AdminHead, DataTable, Field, Row, asArray, isObj, pick, str, useAct, usePaged, useRemembered } from "./common";
 
 const VIEWS = ["관리 작업", "질문하기", "페이지 조회", "전체"];
 
@@ -15,11 +15,15 @@ export default function Access() {
   const [f, setF] = useState({ label: "", ip: "" });
   useEffect(() => { if (myIp && !f.ip) setF((x) => ({ ...x, ip: myIp })); }, [myIp]); // eslint-disable-line react-hooks/exhaustive-deps
   const [view, setView] = useRemembered("view", VIEWS[0]);
+  const [q, setQ] = useRemembered<string>("q", "");
   const all = asArray(logs.data, "logs", "items");
+  const needle = q.trim().toLowerCase();
   const rows = all.filter((r) => {
     const a = str(r.action);
-    return view === "전체" || (view === "관리 작업" ? !["view", "ask"].includes(a) : view === "질문하기" ? a === "ask" : a === "view");
+    return (view === "전체" || (view === "관리 작업" ? !["view", "ask"].includes(a) : view === "질문하기" ? a === "ask" : a === "view"))
+      && (!needle || `${str(r.ip)} ${str(r.page)} ${str(r.action)} ${str(r.detail)} ${str(r.created_at)}`.toLowerCase().includes(needle));
   });
+  const pg = usePaged(`logs-${view}`, rows, needle, 50);
   const actionRows = asArray(actions.data, "actions", "items");
 
   return (
@@ -56,7 +60,12 @@ export default function Access() {
             <Metric k="최근 기록" v={rows.length} />
             <Metric k="고유 IP" v={new Set(rows.map((r) => str(r.ip))).size} />
           </div>
-          <DataTable rows={rows} cols={rows[0] && ["created_at", "ip", "page", "action", "detail"].every((c) => c in rows[0]) ? ["created_at", "ip", "page", "action", "detail"] : undefined} tall />
+          <div className="board-bar">
+            <input type="text" className="bq" placeholder="IP·페이지·동작·내용 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="검색" />
+            <span className="caption">{pg.info}</span><span className="sp" />{pg.sizeSel}
+          </div>
+          <DataTable rows={pg.shown} cols={rows[0] && ["created_at", "ip", "page", "action", "detail"].every((c) => c in rows[0]) ? ["created_at", "ip", "page", "action", "detail"] : undefined} />
+          {pg.pager}
         </div>
       ) : <p className="caption">기록이 없습니다.</p>}
 

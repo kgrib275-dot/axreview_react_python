@@ -97,6 +97,7 @@ CREATE INDEX IF NOT EXISTS ix_art_collected ON articles(collected_at);
 
 # 이전 버전 DB(샘플 사이트만 있던 시절)에 없던 컬럼 — 있으면 건너뛴다.
 _MIGRATIONS = [
+    ("keywords", "needs_ai", "INTEGER DEFAULT 0"),  # 넓은 단어는 AI 단어와 함께일 때만 (2026-10-30)
     ("notes", "status", "TEXT NOT NULL DEFAULT 'published'"),
     ("notes", "article_hash", "TEXT"),
     ("notes", "created_at", "TEXT"),
@@ -187,9 +188,9 @@ def init_db() -> None:
             if not conn.execute("SELECT COUNT(*) FROM keywords").fetchone()[0] and KEYWORDS_SEED.exists():
                 for e in yaml.safe_load(KEYWORDS_SEED.read_text(encoding="utf-8")) or []:
                     conn.execute(
-                        "INSERT INTO keywords (keyword, aliases, mode, weight, category) VALUES (?,?,?,?,?)",
+                        "INSERT INTO keywords (keyword, aliases, mode, weight, category, needs_ai) VALUES (?,?,?,?,?,?)",
                         (e["keyword"], json.dumps(e.get("aliases", []), ensure_ascii=False),
-                         e.get("mode", "include"), e.get("weight", 1.0), e.get("category", "")),
+                         e.get("mode", "include"), e.get("weight", 1.0), e.get("category", ""), int(bool(e.get("needs_ai")))),
                     )
         optimize(conn)
     finally:
@@ -534,6 +535,7 @@ def list_keywords() -> list[dict]:
     for r in rows:
         r["aliases"] = json.loads(r["aliases"] or "[]")
         r["active"] = bool(r["active"])
+        r["needs_ai"] = bool(r.get("needs_ai"))
     return rows
 
 
@@ -547,10 +549,10 @@ def replace_keywords(rows: list[dict]) -> None:
                 if not str(r.get("keyword") or "").strip():
                     continue
                 conn.execute(
-                    "INSERT INTO keywords (keyword, aliases, mode, weight, active, category) VALUES (?,?,?,?,?,?)",
+                    "INSERT INTO keywords (keyword, aliases, mode, weight, active, category, needs_ai) VALUES (?,?,?,?,?,?,?)",
                     (r["keyword"].strip(), json.dumps(r.get("aliases") or [], ensure_ascii=False),
                      r.get("mode") or "include", float(r.get("weight") or 1.0),
-                     int(bool(r.get("active", True))), r.get("category") or ""),
+                     int(bool(r.get("active", True))), r.get("category") or "", int(bool(r.get("needs_ai")))),
                 )
     finally:
         conn.close()
@@ -559,7 +561,7 @@ def replace_keywords(rows: list[dict]) -> None:
 def load_active_keyword_rules() -> list[KeywordRule]:
     return [
         KeywordRule(keyword=r["keyword"], aliases=r["aliases"], mode=r["mode"], weight=r["weight"],
-                    category=r["category"] or "")
+                    category=r["category"] or "", needs_ai=bool(r.get("needs_ai")))
         for r in list_keywords() if r["active"]
     ]
 

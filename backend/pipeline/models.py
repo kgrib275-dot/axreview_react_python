@@ -26,3 +26,4 @@ class KeywordRule:
     mode: str
     weight: float
     category: str = ""
+    needs_ai: bool = False  # 업종·직무처럼 넓은 단어 — AI 관련 단어와 같은 글에 함께 나올 때만 통과 (2026-10-30)

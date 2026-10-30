@@ -1,6 +1,6 @@
 // 관리 화면 공용 조각 — 관리 API 래퍼(403 → 토큰 입력), 토스트, 제목, 범용 표, 작은 막대 차트, CSV 내려받기.
 // 백엔드 응답 모양이 조금 달라도 깨지지 않도록 "객체 배열이면 표, 객체면 키-값" 식으로 범용 렌더링한다.
-import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, del, get, post, put } from "../../api";
 
 export type Row = Record<string, unknown>;
@@ -80,18 +80,69 @@ export function weekLabel(monday: string) {
 // ---------- 토스트 ----------
 type Toast = { id: number; msg: string; kind: "info" | "ok" | "err" };
 const ToastCtx = createContext<(msg: string, kind?: Toast["kind"]) => void>(() => undefined);
-/** 새로고침해도 남는 화면 상태(탭·기간 등) — 이 브라우저(관리자)에만 기억한다 (localStorage, 화면 경로 + key). 2026-10-30 */
-export function useRemembered<T extends string | number>(key: string, initial: T): [T, (v: T) => void] {
+/** 새로고침(F5)해도 남는 화면 상태 — 탭·기간·필터·검색어·쪽 번호·보기 개수 등. 이 브라우저(관리자)에만 기억한다
+ *  (localStorage, 화면 경로 + key — 관리자마다 따로). 문자열·숫자·배열·객체 모두 JSON 으로 저장. 2026-10-30 */
+export function useRemembered<T>(key: string, initial: T): [T, (v: T | ((p: T) => T)) => void] {
   const k = `axreview-adm:${window.location.pathname}:${key}`;
-  const [v, setV] = useState<T>(() => {
+  const read = (): T => {
     try {
       const raw = localStorage.getItem(k);
       if (raw === null) return initial;
-      return (typeof initial === "number" ? Number(raw) : raw) as T;
+      try {
+        const parsed = JSON.parse(raw);
+        // 저장된 모양이 지금 기대하는 모양과 다르면(예전 버전 값) 기본값
+        if (Array.isArray(initial) !== Array.isArray(parsed) || (typeof initial !== "object" && typeof parsed !== typeof initial)) return initial;
+        return parsed as T;
+      } catch {
+        return (typeof initial === "string" ? raw : initial) as T;  // 예전엔 문자열을 JSON 없이 저장했다
+      }
     } catch { return initial; }
-  });
-  useEffect(() => { try { localStorage.setItem(k, String(v)); } catch { /* 사생활 보호 모드 */ } }, [k, v]);
-  return [v, setV];
+  };
+  // 키가 바뀌면(예: 노트 검토의 탭별 필터) 그 키에 기억한 값을 다시 읽는다 — 앞 탭의 값이 따라오지 않게
+  const [st, setSt] = useState<{ k: string; v: T }>(() => ({ k, v: read() }));
+  const v = st.k === k ? st.v : read();
+  if (st.k !== k) setSt({ k, v });
+  const set = useCallback((nv: T | ((p: T) => T)) => {
+    setSt((cur) => {
+      const next = typeof nv === "function" ? (nv as (p: T) => T)(cur.v) : nv;
+      try { localStorage.setItem(cur.k, JSON.stringify(next)); } catch { /* 사생활 보호 모드 */ }
+      return { k: cur.k, v: next };
+    });
+  }, []);
+  return [v, set];
+}
+
+/** 게시판 쪽 나누기 — 보기 개수·쪽 번호를 기억하고(F5 유지), 필터(sig)가 바뀌면 1쪽으로. 쪽이 줄면 마지막 쪽으로 맞춘다. */
+export function usePaged<T>(key: string, rows: T[], sig: string, defaultSize = 20) {
+  const [size, setSize] = useRemembered<number>(`${key}-size`, defaultSize);
+  const [page, setPage] = useRemembered<number>(`${key}-page`, 1);
+  const lastSig = useRef(sig);
+  useEffect(() => {
+    if (lastSig.current !== sig) { lastSig.current = sig; setPage(1); }  // 처음 그릴 때(F5 직후)는 기억한 쪽을 그대로 둔다
+  }, [sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pages = Math.max(1, Math.ceil(rows.length / size));
+  const cur = Math.min(Math.max(1, page), pages);
+  const shown = rows.slice((cur - 1) * size, cur * size);
+  const info = `${rows.length}건${rows.length ? ` · ${(cur - 1) * size + 1}–${Math.min(cur * size, rows.length)}` : ""}`;
+  const sizeSel = (
+    <select className="pg-size" value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(1); }} aria-label="보기 개수">
+      {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}개씩</option>)}
+    </select>
+  );
+  const nums = [...new Set([1, pages, cur - 2, cur - 1, cur, cur + 1, cur + 2].filter((n) => n >= 1 && n <= pages))].sort((a, b) => a - b);
+  const pager = pages > 1 ? (
+    <nav className="pg-nav" aria-label="쪽 넘김">
+      <button type="button" className="btn sm" disabled={cur <= 1} onClick={() => setPage(cur - 1)}>‹ 이전</button>
+      {nums.map((n, i) => (
+        <Fragment key={n}>
+          {i > 0 && n - nums[i - 1] > 1 && <span className="caption">…</span>}
+          <button type="button" className={`btn sm${n === cur ? " primary" : ""}`} onClick={() => setPage(n)} aria-current={n === cur ? "page" : undefined}>{n}</button>
+        </Fragment>
+      ))}
+      <button type="button" className="btn sm" disabled={cur >= pages} onClick={() => setPage(cur + 1)}>다음 ›</button>
+    </nav>
+  ) : null;
+  return { shown, info, sizeSel, pager, page: cur, pages };
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {

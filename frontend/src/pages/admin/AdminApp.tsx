@@ -6,6 +6,7 @@ import { useMe } from "../../me";
 import "./admin.css";
 import { ToastProvider, onForbidden } from "./common";
 import { JobsProvider } from "./JobRunner";
+import { LogDock } from "./LogDock";
 
 const L = (p: () => Promise<{ default: React.ComponentType }>) => lazy(p);
 const PAGES: { path: string; label: string; grp?: string; C: React.LazyExoticComponent<React.ComponentType> }[] = [
@@ -103,6 +104,7 @@ function TokenPrompt({ reason, onDone }: { reason: string; onDone: () => Promise
 export default function AdminApp() {
   const { me, reload } = useMe();
   const [forbidden, setForbidden] = useState<string | null>(null);
+  const [dockH, setDockH] = useState(0);  // 실행 로그 독 높이 — 본문 아래 여백으로 써서 끝 내용이 가려지지 않게
 
   useEffect(() => {
     onForbidden(() => setForbidden("관리 API 가 접근을 거부했습니다 (403). 토큰을 확인해 주세요."));
@@ -129,7 +131,7 @@ export default function AdminApp() {
       <JobsProvider>
         <div className="container adm">
           <SideNav />
-          <main className="adm-main">
+          <main className="adm-main" style={dockH ? { paddingBottom: dockH + 12 } : undefined}>
             <Suspense fallback={<div className="page-loading">불러오는 중…</div>}>
               <Routes>
                 <Route index element={<Navigate to="dashboard" replace />} />
@@ -139,6 +141,7 @@ export default function AdminApp() {
             </Suspense>
           </main>
         </div>
+        <LogDock onHeight={setDockH} />
       </JobsProvider>
     </ToastProvider>
   );

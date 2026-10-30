@@ -1,7 +1,7 @@
 // 노트 검토 — 검토 대기/게시됨/반려됨/직접 작성. 편집 폼 + 게시·저장·반려·삭제 (app_pages/admin/review.py).
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, Tabs, useLoad } from "../../components/ui";
-import { A, AdminHead, Expander, Field, Multi, Row, asArray, splitCsv, str, useAct, useRemembered } from "./common";
+import { A, AdminHead, Field, Multi, Row, asArray, splitCsv, str, useAct, usePaged, useRemembered } from "./common";
 import { useJobs } from "./JobRunner";
 
 export const CATEGORIES = ["AX Strategy", "AX Implementation", "AX Enablement"];
@@ -68,24 +68,37 @@ export default function Review() {
   const { data, error, reload } = useLoad(async () => (status ? asArray(await A.get(`notes?status=${status}`), "notes", "items") : []), [status, finished]);
   const act = useAct();
   const items = data || [];
+  // 게시판 상태 — 탭(보기)마다 따로 기억, F5 해도 필터·검색·쪽·열어 둔 노트가 남는다 (2026-10-30)
+  const [fCat, setFCat] = useRemembered<string>(`cat-${view}`, "");
+  const [fKind, setFKind] = useRemembered<string>(`kind-${view}`, "");
+  const [q, setQ] = useRemembered<string>(`q-${view}`, "");
+  const [openId, setOpenId] = useRemembered<string>(`open-${view}`, "");
+  const needle = q.trim().toLowerCase();
+  const rows = useMemo(() => items.filter((n) => (!fCat || str(n.category) === fCat) && (!fKind || str(n.kind) === fKind)
+    && (!needle || `${str(n.title)} ${str(n.summary)} ${str(n.source)} ${str(n.tags)}`.toLowerCase().includes(needle))), [items, fCat, fKind, needle]);
+  const pg = usePaged(`notes-${view}`, rows, `${fCat}|${fKind}|${needle}`, 20);
+  const open = items.find((n) => str(n.id) === openId) || null;
 
   const apply = async (id: unknown, action: "publish" | "save" | "reject", payload: ReturnType<typeof toPayload>) => {
     const msg = { publish: "게시했습니다.", save: "저장했습니다.", reject: "반려했습니다." }[action];
     await act(async () => {
       if (id === undefined || id === null) {
-        await A.post("notes", { ...payload, status: action === "publish" ? "published" : "draft" }); // 직접 작성 (계약 밖 — 가정)
+        await A.post("notes", { ...payload, status: action === "publish" ? "published" : "draft" }); // 직접 작성
         return;
       }
       await A.put(`notes/${id}`, action === "reject" ? { ...payload, status: "rejected" } : payload);
       if (action === "publish") await A.post(`notes/${id}/publish`);
     }, msg);
+    if (action !== "save") setOpenId("");  // 게시·반려하면 이 목록에서 빠지므로 편집 창을 닫는다
     reload();
   };
   const remove = async (n: Row) => {
     if (!window.confirm(`'${str(n.title)}' 노트를 삭제할까요?`)) return;
     await act(() => A.del(`notes/${n.id}`), "삭제했습니다.");
+    setOpenId("");
     reload();
   };
+  const anyFilter = fCat || fKind || q;
 
   return (
     <div>
@@ -96,23 +109,57 @@ export default function Review() {
         <NoteForm key="new" note={null} onSubmit={(a, p) => apply(null, a, p)} />
       ) : (
         <div>
-          <p className="caption">{items.length}편</p>
+          <div className="board-bar">
+            <select value={fCat} onChange={(e) => setFCat(e.target.value)} aria-label="카테고리">
+              <option value="">카테고리 전체</option>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+            </select>
+            <select value={fKind} onChange={(e) => setFKind(e.target.value)} aria-label="유형">
+              <option value="">유형 전체</option>{KINDS.map((c) => <option key={c}>{c}</option>)}
+            </select>
+            <input type="text" className="bq" placeholder="제목·요약·출처·태그 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="검색" />
+            {anyFilter && <button type="button" className="btn sm ghost" onClick={() => { setFCat(""); setFKind(""); setQ(""); }}>초기화</button>}
+            <span className="sp" />
+            {pg.sizeSel}
+          </div>
+          <p className="caption">전체 {items.length}편 중 {pg.info}</p>
           {!items.length && !error && (
             <Alert kind="info">해당하는 노트가 없습니다.{status === "draft" && " 대시보드에서 '노트 초안 생성'을 실행해 보세요."}</Alert>
           )}
-          {items.map((n) => (
-            <Expander
-              key={str(n.id)}
-              title={<span><b>{str(n.title)}</b><br /><span className="caption">{str(n.category)} · {str(n.source)} · {str(n.published)}</span></span>}
-            >
-              <div className="btn-row" style={{ marginBottom: 12 }}>
-                <a className="btn sm" href={`/notes?id=${str(n.id)}`} target="_blank" rel="noreferrer">👁 사이트 미리보기</a>
-                {str(n.url) && <a className="btn sm" href={str(n.url)} target="_blank" rel="noreferrer">↗ 원문</a>}
-                <button className="btn sm" onClick={() => remove(n)}>🗑 삭제</button>
+          {items.length > 0 && (
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>제목</th><th>카테고리</th><th>유형</th><th>출처</th><th>날짜</th></tr></thead>
+                <tbody>
+                  {pg.shown.map((n) => {
+                    const on = str(n.id) === openId;
+                    return (
+                      <tr key={str(n.id)} className={`board-row${on ? " on" : ""}`} onClick={() => setOpenId(on ? "" : str(n.id))}>
+                        <td><b>{str(n.title)}</b></td>
+                        <td style={{ whiteSpace: "nowrap" }}>{str(n.category)}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{str(n.kind)}</td>
+                        <td>{str(n.source)}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{str(n.published).slice(0, 10)}</td>
+                      </tr>
+                    );
+                  })}
+                  {!pg.shown.length && <tr><td colSpan={5} className="caption">조건에 맞는 노트가 없습니다.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {pg.pager}
+          {open && (
+            <div className="board-edit">
+              <div className="board-edit-h">
+                <b className="grow">✎ {str(open.title)}</b>
+                <a className="btn sm" href={`/notes?id=${str(open.id)}`} target="_blank" rel="noreferrer">👁 사이트 미리보기</a>
+                {str(open.url) && <a className="btn sm" href={str(open.url)} target="_blank" rel="noreferrer">↗ 원문</a>}
+                <button className="btn sm" onClick={() => remove(open)}>🗑 삭제</button>
+                <button className="btn sm ghost" onClick={() => setOpenId("")}>닫기</button>
               </div>
-              <NoteForm note={n} onSubmit={(a, p) => apply(n.id, a, p)} />
-            </Expander>
-          ))}
+              <NoteForm key={str(open.id)} note={open} onSubmit={(a, p) => apply(open.id, a, p)} />
+            </div>
+          )}
         </div>
       )}
     </div>
